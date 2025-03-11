@@ -23,22 +23,47 @@ class DaysParam(BaseModel):
         description="Number of days to look back for cost data"
     )
 
-def get_bedrock_logs(days_back=7):
+
+
+class BedrockLogsParams(BaseModel):
+    """Parameters for retrieving Bedrock invocation logs."""
+    days: int = Field(
+        default=7,
+        description="Number of days to look back for Bedrock logs",
+        ge=1,
+        le=30
+    )
+    region: str = Field(
+        default="us-east-1",
+        description="AWS region to retrieve logs from"
+    )
+
+
+def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
     """
-    Retrieve Bedrock invocation logs from CloudWatch for the past n days.
+    Retrieve Bedrock invocation logs for the last n days in a given region as a dataframe
 
     Args:
-        days_back (int): Number of days of logs to retrieve (default: 7)
+        params: Pydantic model containing parameters:
+            - days: Number of days to look back (default: 7)
+            - region: AWS region to query (default: us-east-1)
 
     Returns:
-        list: List of dictionaries containing filtered log data
+        pd.DataFrame: DataFrame containing the log data with columns:
+            - timestamp: Timestamp of the invocation
+            - region: AWS region
+            - modelId: Bedrock model ID
+            - userId: User ARN
+            - inputTokens: Number of input tokens
+            - completionTokens: Number of completion tokens
+            - totalTokens: Total tokens used
     """
     # Initialize CloudWatch Logs client
-    client = boto3.client("logs")
+    client = boto3.client("logs", region_name=params.region)
 
     # Calculate time range
     end_time = datetime.now()
-    start_time = end_time - timedelta(days=days_back)
+    start_time = end_time - timedelta(days=params.days)
 
     # Convert to milliseconds since epoch
     start_time_ms = int(start_time.timestamp() * 1000)
@@ -50,8 +75,8 @@ def get_bedrock_logs(days_back=7):
         paginator = client.get_paginator("filter_log_events")
 
         # Parameters for the log query
-        params = {
-            "logGroupName": "/aws/bedrock",  # The main log group
+        query_params = {
+            "logGroupName": "BedrockModelInvocationLogGroup",  # The main log group
             "logStreamNames": [
                 "aws/bedrock/modelinvocations"
             ],  # The specific log stream
@@ -60,7 +85,7 @@ def get_bedrock_logs(days_back=7):
         }
 
         # Paginate through results
-        for page in paginator.paginate(**params):
+        for page in paginator.paginate(**query_params):
             for event in page.get("events", []):
                 try:
                     # Parse the message as JSON
@@ -101,69 +126,48 @@ def get_bedrock_logs(days_back=7):
                     continue  # Skip non-JSON messages
                 except KeyError:
                     continue  # Skip messages missing required fields
-
-        return filtered_logs
+        
+        # Create DataFrame if we have logs
+        if filtered_logs:
+            df = pd.DataFrame(filtered_logs)
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            return df
+        else:
+            print("No logs found for the specified time period.")
+            return None
 
     except client.exceptions.ResourceNotFoundException:
         print(
-            f"Log group '/aws/bedrock' or stream 'aws/bedrock/modelinvocations' not found"
+            f"Log group 'BedrockModelInvocationLogGroup' or stream 'aws/bedrock/modelinvocations' not found"
         )
-        return []
+        return None
     except Exception as e:
         print(f"Error retrieving logs: {str(e)}")
-        return []
+        return None
+
 
 
 # Initialize FastMCP server
 mcp = FastMCP("aws_cloudwatch_logs")
 
-
 @mcp.tool()
-async def get_bedrock_logs_df(params: DaysParam) -> pd.DataFrame:
-    """
-    Retrieve Bedrock invocation logs as a pandas DataFrame.
-
-    Args:
-        params: Parameters specifying the number of days to look back
-
-    Returns:
-        pd.DataFrame: DataFrame containing the log data with columns:
-            - timestamp: Timestamp of the invocation
-            - region: AWS region
-            - modelId: Bedrock model ID
-            - userId: User ARN
-            - inputTokens: Number of input tokens
-            - completionTokens: Number of completion tokens
-            - totalTokens: Total tokens used
-    """
-    # Get logs using existing function
-    logs = get_bedrock_logs(days_back=params.days)
-
-    # Convert to DataFrame
-    df = pd.DataFrame(logs)
-    if not df.empty:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-    return df
-
-
-@mcp.tool()
-async def get_model_usage_stats(params: DaysParam) -> pd.DataFrame:
+async def get_bedrock_model_usage_stats(params: BedrockLogsParams) -> str:
     """
     Get usage statistics grouped by model.
 
     Args:
-        params: Parameters specifying the number of days to look back
+        params: Parameters specifying the number of days to look back and region
 
     Returns:
-        pd.DataFrame: DataFrame with model usage statistics
+        str: Formatted string representation of DataFrame with model usage statistics
     """
-    df = await get_bedrock_logs_df(params)
+    df = get_bedrock_logs(params)
 
-    if df.empty:
-        return pd.DataFrame()
+    if df is None or df.empty:
+        return "No usage data found for the specified period."
 
-    return (
+    # Group by model and aggregate statistics
+    stats_df = (
         df.groupby("modelId")
         .agg(
             {
@@ -174,25 +178,59 @@ async def get_model_usage_stats(params: DaysParam) -> pd.DataFrame:
         )
         .round(2)
     )
-
+    
+    # Rename columns for better readability
+    stats_df.columns = [
+        f"{col[0]}_{col[1]}" for col in stats_df.columns
+    ]
+    
+    # Rename specific columns to more descriptive names
+    column_renames = {
+        "inputTokens_count": "request_count",
+        "inputTokens_sum": "input_tokens_total",
+        "inputTokens_mean": "avg_input_tokens",
+        "completionTokens_sum": "completion_tokens_total",
+        "completionTokens_mean": "avg_completion_tokens",
+        "totalTokens_sum": "total_tokens",
+        "totalTokens_mean": "avg_tokens_per_request"
+    }
+    
+    stats_df = stats_df.rename(columns=column_renames)
+    
+    # Format the dataframe as a string
+    result = f"Model Usage Statistics (Past {params.days} days - {params.region}):\n"
+    result += "-" * 80 + "\n\n"
+    result += stats_df.to_string()
+    
+    # Add summary information
+    total_requests = stats_df["request_count"].sum()
+    total_tokens = stats_df["total_tokens"].sum()
+    
+    result += f"\n\nSummary:"
+    result += f"\n- Total Requests: {total_requests:,}"
+    result += f"\n- Total Tokens: {total_tokens:,}"
+    result += f"\n- Average Tokens per Request: {(total_tokens / total_requests):.2f}"
+    
+    return result
 
 @mcp.tool()
-async def get_user_usage_stats(params: DaysParam) -> pd.DataFrame:
+async def get_bedrock_user_usage_stats(params: BedrockLogsParams) -> str:
     """
     Get usage statistics grouped by user.
 
     Args:
-        params: Parameters specifying the number of days to look back
+        params: Parameters specifying the number of days to look back and region
 
     Returns:
-        pd.DataFrame: DataFrame with user usage statistics
+        str: Formatted string representation of user usage statistics
     """
-    df = await get_bedrock_logs_df(params)
+    df = get_bedrock_logs(params)
 
-    if df.empty:
-        return pd.DataFrame()
+    if df is None or df.empty:
+        return "No usage data found for the specified period."
 
-    return (
+    # Group by user and aggregate statistics
+    stats_df = (
         df.groupby("userId")
         .agg(
             {
@@ -204,25 +242,89 @@ async def get_user_usage_stats(params: DaysParam) -> pd.DataFrame:
         )
         .round(2)
     )
-
+    
+    # Rename columns for better readability
+    stats_df.columns = [
+        f"{col[0]}_{col[1]}" if not isinstance(col[1], str) else f"{col[0]}_models_used" 
+        for col in stats_df.columns
+    ]
+    
+    # Rename specific columns to more descriptive names
+    column_renames = {
+        "inputTokens_count": "request_count",
+        "inputTokens_sum": "input_tokens_total",
+        "inputTokens_mean": "avg_input_tokens",
+        "completionTokens_sum": "completion_tokens_total",
+        "completionTokens_mean": "avg_completion_tokens",
+        "totalTokens_sum": "total_tokens",
+        "totalTokens_mean": "avg_tokens_per_request"
+    }
+    
+    stats_df = stats_df.rename(columns=column_renames)
+    
+    # Extract username from ARN for better readability
+    def extract_username(arn):
+        try:
+            return arn.split('/')[-1] if '/' in arn else arn
+        except:
+            return arn
+    
+    stats_df.index = stats_df.index.map(extract_username)
+    
+    # Format the modelId lists to be more readable
+    stats_df['modelId_models_used'] = stats_df['modelId_models_used'].apply(
+        lambda models: ', '.join([m.split('.')[-1] for m in models])
+    )
+    
+    # Format the dataframe as a string
+    result = f"User Usage Statistics (Past {params.days} days - {params.region}):\n"
+    result += "-" * 80 + "\n\n"
+    
+    # Format the output table
+    pd.set_option('display.max_colwidth', 30)  # Limit column width for display
+    result += stats_df.to_string()
+    pd.reset_option('display.max_colwidth')
+    
+    # Add summary information
+    total_users = len(stats_df)
+    total_requests = stats_df["request_count"].sum()
+    total_tokens = stats_df["total_tokens"].sum()
+    
+    result += f"\n\nSummary:"
+    result += f"\n- Total Users: {total_users}"
+    result += f"\n- Total Requests: {total_requests:,}"
+    result += f"\n- Total Tokens: {total_tokens:,}"
+    
+    if total_requests > 0:
+        result += f"\n- Average Tokens per Request: {(total_tokens / total_requests):.2f}"
+    
+    # Add top users by usage
+    if not stats_df.empty:
+        result += "\n\nTop Users by Token Usage:"
+        top_users = stats_df.sort_values("total_tokens", ascending=False).head(5)
+        for idx, row in top_users.iterrows():
+            result += f"\n- {idx}: {row['total_tokens']:,} tokens ({row['request_count']} requests)"
+    
+    return result
 
 @mcp.tool()
-async def get_daily_usage_stats(params: DaysParam) -> pd.DataFrame:
+async def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
     """
     Get daily usage statistics.
 
     Args:
-        params: Parameters specifying the number of days to look back
+        params: Parameters specifying the number of days to look back and region
 
     Returns:
-        pd.DataFrame: DataFrame with daily usage statistics
+        str: Formatted string representation of daily usage statistics
     """
-    df = await get_bedrock_logs_df(params)
+    df = get_bedrock_logs(params)
 
-    if df.empty:
-        return pd.DataFrame()
+    if df is None or df.empty:
+        return "No usage data found for the specified period."
 
-    return (
+    # Group by date and aggregate statistics
+    stats_df = (
         df.groupby(df["timestamp"].dt.date)
         .agg(
             {
@@ -234,6 +336,94 @@ async def get_daily_usage_stats(params: DaysParam) -> pd.DataFrame:
         )
         .round(2)
     )
+    
+    # Rename columns for better readability
+    stats_df.columns = [
+        f"{col[0]}_{col[1]}" if not isinstance(col[1], str) else f"{col[0]}_models" 
+        for col in stats_df.columns
+    ]
+    
+    # Rename specific columns to more descriptive names
+    column_renames = {
+        "inputTokens_count": "request_count",
+        "inputTokens_sum": "input_tokens",
+        "inputTokens_mean": "avg_input_tokens",
+        "completionTokens_sum": "completion_tokens",
+        "completionTokens_mean": "avg_completion_tokens",
+        "totalTokens_sum": "total_tokens",
+        "totalTokens_mean": "avg_tokens_per_request"
+    }
+    
+    stats_df = stats_df.rename(columns=column_renames)
+    
+    # Format the modelId lists to be more readable
+    stats_df['modelId_models'] = stats_df['modelId_models'].apply(
+        lambda models: ', '.join([m.split('.')[-1] for m in models])
+    )
+    
+    # Sort by date (newest first)
+    stats_df = stats_df.sort_index(ascending=False)
+    
+    # Format the output
+    result = f"Daily Bedrock Usage Statistics (Past {params.days} days - {params.region}):\n"
+    result += "-" * 80 + "\n\n"
+    
+    # Format dates in the index
+    stats_df.index = [d.strftime('%Y-%m-%d') for d in stats_df.index]
+    
+    # Set display options for better formatting
+    pd.set_option('display.max_colwidth', 30)
+    pd.set_option('display.float_format', '{:,.2f}'.format)
+    
+    # Select most relevant columns for display
+    display_cols = ['request_count', 'total_tokens', 'avg_tokens_per_request', 'modelId_models']
+    display_df = stats_df[display_cols].copy()
+    
+    # Rename columns for display
+    display_df.columns = ['Requests', 'Total Tokens', 'Avg Tokens/Req', 'Models Used']
+    
+    # Convert to string
+    result += display_df.to_string()
+    
+    # Reset display options
+    pd.reset_option('display.max_colwidth')
+    pd.reset_option('display.float_format')
+    
+    # Add summary statistics
+    total_days = len(stats_df)
+    total_requests = stats_df['request_count'].sum()
+    total_tokens = stats_df['total_tokens'].sum()
+    avg_daily_requests = stats_df['request_count'].mean()
+    avg_daily_tokens = stats_df['total_tokens'].mean()
+    
+    result += "\n\nSummary Statistics:"
+    result += f"\n- Period: {total_days} days"
+    result += f"\n- Total Requests: {total_requests:,}"
+    result += f"\n- Total Tokens: {total_tokens:,}"
+    result += f"\n- Daily Average: {avg_daily_requests:.2f} requests, {avg_daily_tokens:,.2f} tokens"
+    
+    # Add trend analysis
+    if len(stats_df) > 1:
+        result += "\n\nUsage Trend:"
+        # Calculate day-over-day change for the last 3 days
+        if len(stats_df) >= 3:
+            last_three_days = stats_df.head(3).sort_index()
+            day_labels = [d for d in last_three_days.index]
+            
+            for i in range(1, len(last_three_days)):
+                prev_day = last_three_days.iloc[i-1]
+                curr_day = last_three_days.iloc[i]
+                pct_change_tokens = ((curr_day['total_tokens'] - prev_day['total_tokens']) / prev_day['total_tokens']) * 100 if prev_day['total_tokens'] > 0 else 0
+                
+                result += f"\n- {day_labels[i]}: {curr_day['total_tokens']:,.2f} tokens "
+                if pct_change_tokens > 0:
+                    result += f"(↑ {pct_change_tokens:.1f}% from previous day)"
+                elif pct_change_tokens < 0:
+                    result += f"(↓ {abs(pct_change_tokens):.1f}% from previous day)"
+                else:
+                    result += "(no change from previous day)"
+    
+    return result
 
 @mcp.tool()
 async def get_ec2_spend_last_day() -> Dict[str, Any]:
