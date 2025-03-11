@@ -2,7 +2,7 @@
 
 A command-line interface and API for interacting with AWS Cost Explorer data through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol).
 
-**Demo video**
+### Demo video
 
 [![AWS Cost Explorer MCP Server Deep Dive](https://img.youtube.com/vi/WuVOmYLRFmI/maxresdefault.jpg)](https://youtu.be/WuVOmYLRFmI)
 
