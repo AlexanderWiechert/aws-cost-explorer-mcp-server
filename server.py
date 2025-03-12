@@ -151,166 +151,9 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
 mcp = FastMCP("aws_cloudwatch_logs")
 
 @mcp.tool()
-async def get_bedrock_model_usage_stats(params: BedrockLogsParams) -> str:
+def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
     """
-    Get usage statistics grouped by model.
-
-    Args:
-        params: Parameters specifying the number of days to look back and region
-
-    Returns:
-        str: Formatted string representation of DataFrame with model usage statistics
-    """
-    df = get_bedrock_logs(params)
-
-    if df is None or df.empty:
-        return "No usage data found for the specified period."
-
-    # Group by model and aggregate statistics
-    stats_df = (
-        df.groupby("modelId")
-        .agg(
-            {
-                "inputTokens": ["count", "sum", "mean"],
-                "completionTokens": ["sum", "mean"],
-                "totalTokens": ["sum", "mean"],
-            }
-        )
-        .round(2)
-    )
-    
-    # Rename columns for better readability
-    stats_df.columns = [
-        f"{col[0]}_{col[1]}" for col in stats_df.columns
-    ]
-    
-    # Rename specific columns to more descriptive names
-    column_renames = {
-        "inputTokens_count": "request_count",
-        "inputTokens_sum": "input_tokens_total",
-        "inputTokens_mean": "avg_input_tokens",
-        "completionTokens_sum": "completion_tokens_total",
-        "completionTokens_mean": "avg_completion_tokens",
-        "totalTokens_sum": "total_tokens",
-        "totalTokens_mean": "avg_tokens_per_request"
-    }
-    
-    stats_df = stats_df.rename(columns=column_renames)
-    
-    # Format the dataframe as a string
-    result = f"Model Usage Statistics (Past {params.days} days - {params.region}):\n"
-    result += "-" * 80 + "\n\n"
-    result += stats_df.to_string()
-    
-    # Add summary information
-    total_requests = stats_df["request_count"].sum()
-    total_tokens = stats_df["total_tokens"].sum()
-    
-    result += f"\n\nSummary:"
-    result += f"\n- Total Requests: {total_requests:,}"
-    result += f"\n- Total Tokens: {total_tokens:,}"
-    result += f"\n- Average Tokens per Request: {(total_tokens / total_requests):.2f}"
-    
-    return result
-
-@mcp.tool()
-async def get_bedrock_user_usage_stats(params: BedrockLogsParams) -> str:
-    """
-    Get usage statistics grouped by user.
-
-    Args:
-        params: Parameters specifying the number of days to look back and region
-
-    Returns:
-        str: Formatted string representation of user usage statistics
-    """
-    df = get_bedrock_logs(params)
-
-    if df is None or df.empty:
-        return "No usage data found for the specified period."
-
-    # Group by user and aggregate statistics
-    stats_df = (
-        df.groupby("userId")
-        .agg(
-            {
-                "inputTokens": ["count", "sum", "mean"],
-                "completionTokens": ["sum", "mean"],
-                "totalTokens": ["sum", "mean"],
-                "modelId": lambda x: list(set(x)),  # List of unique models used
-            }
-        )
-        .round(2)
-    )
-    
-    # Rename columns for better readability
-    stats_df.columns = [
-        f"{col[0]}_{col[1]}" if not isinstance(col[1], str) else f"{col[0]}_models_used" 
-        for col in stats_df.columns
-    ]
-    
-    # Rename specific columns to more descriptive names
-    column_renames = {
-        "inputTokens_count": "request_count",
-        "inputTokens_sum": "input_tokens_total",
-        "inputTokens_mean": "avg_input_tokens",
-        "completionTokens_sum": "completion_tokens_total",
-        "completionTokens_mean": "avg_completion_tokens",
-        "totalTokens_sum": "total_tokens",
-        "totalTokens_mean": "avg_tokens_per_request"
-    }
-    
-    stats_df = stats_df.rename(columns=column_renames)
-    
-    # Extract username from ARN for better readability
-    def extract_username(arn):
-        try:
-            return arn.split('/')[-1] if '/' in arn else arn
-        except:
-            return arn
-    
-    stats_df.index = stats_df.index.map(extract_username)
-    
-    # Format the modelId lists to be more readable
-    stats_df['modelId_models_used'] = stats_df['modelId_models_used'].apply(
-        lambda models: ', '.join([m.split('.')[-1] for m in models])
-    )
-    
-    # Format the dataframe as a string
-    result = f"User Usage Statistics (Past {params.days} days - {params.region}):\n"
-    result += "-" * 80 + "\n\n"
-    
-    # Format the output table
-    pd.set_option('display.max_colwidth', 30)  # Limit column width for display
-    result += stats_df.to_string()
-    pd.reset_option('display.max_colwidth')
-    
-    # Add summary information
-    total_users = len(stats_df)
-    total_requests = stats_df["request_count"].sum()
-    total_tokens = stats_df["total_tokens"].sum()
-    
-    result += f"\n\nSummary:"
-    result += f"\n- Total Users: {total_users}"
-    result += f"\n- Total Requests: {total_requests:,}"
-    result += f"\n- Total Tokens: {total_tokens:,}"
-    
-    if total_requests > 0:
-        result += f"\n- Average Tokens per Request: {(total_tokens / total_requests):.2f}"
-    
-    # Add top users by usage
-    if not stats_df.empty:
-        result += "\n\nTop Users by Token Usage:"
-        top_users = stats_df.sort_values("total_tokens", ascending=False).head(5)
-        for idx, row in top_users.iterrows():
-            result += f"\n- {idx}: {row['total_tokens']:,} tokens ({row['request_count']} requests)"
-    
-    return result
-
-@mcp.tool()
-async def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
-    """
-    Get daily usage statistics.
+    Get daily usage statistics with detailed breakdowns.
 
     Args:
         params: Parameters specifying the number of days to look back and region
@@ -322,106 +165,320 @@ async def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
 
     if df is None or df.empty:
         return "No usage data found for the specified period."
-
-    # Group by date and aggregate statistics
-    stats_df = (
-        df.groupby(df["timestamp"].dt.date)
-        .agg(
-            {
-                "inputTokens": ["count", "sum", "mean"],
-                "completionTokens": ["sum", "mean"],
-                "totalTokens": ["sum", "mean"],
-                "modelId": lambda x: list(set(x)),  # List of unique models used per day
-            }
-        )
-        .round(2)
-    )
     
-    # Rename columns for better readability
-    stats_df.columns = [
-        f"{col[0]}_{col[1]}" if not isinstance(col[1], str) else f"{col[0]}_models" 
-        for col in stats_df.columns
-    ]
+    # Initialize result string
+    result_parts = []
     
-    # Rename specific columns to more descriptive names
-    column_renames = {
-        "inputTokens_count": "request_count",
-        "inputTokens_sum": "input_tokens",
-        "inputTokens_mean": "avg_input_tokens",
-        "completionTokens_sum": "completion_tokens",
-        "completionTokens_mean": "avg_completion_tokens",
-        "totalTokens_sum": "total_tokens",
-        "totalTokens_mean": "avg_tokens_per_request"
-    }
+    # Add header
+    result_parts.append(f"Bedrock Usage Statistics (Past {params.days} days - {params.region})")
+    result_parts.append("=" * 80)
     
-    stats_df = stats_df.rename(columns=column_renames)
+    # Add a date column for easier grouping
+    df['date'] = df['timestamp'].dt.date
     
-    # Format the modelId lists to be more readable
-    stats_df['modelId_models'] = stats_df['modelId_models'].apply(
-        lambda models: ', '.join([m.split('.')[-1] for m in models])
-    )
+    # === REGION -> MODEL GROUPING ===
+    result_parts.append("\n=== Daily Region-wise -> Model-wise Analysis ===")
     
-    # Sort by date (newest first)
-    stats_df = stats_df.sort_index(ascending=False)
+    # Group by date, region, model and calculate metrics
+    region_model_stats = df.groupby(['date', 'region', 'modelId']).agg({
+        'inputTokens': ['count', 'sum', 'mean', 'max', 'median'],
+        'completionTokens': ['sum', 'mean', 'max', 'median'],
+        'totalTokens': ['sum', 'mean', 'max', 'median']
+    })
     
-    # Format the output
-    result = f"Daily Bedrock Usage Statistics (Past {params.days} days - {params.region}):\n"
-    result += "-" * 80 + "\n\n"
+    # Flatten the column multi-index
+    region_model_stats.columns = [f"{col[0]}_{col[1]}" for col in region_model_stats.columns]
     
-    # Format dates in the index
-    stats_df.index = [d.strftime('%Y-%m-%d') for d in stats_df.index]
+    # Reset the index to get a flat dataframe
+    flattened_stats = region_model_stats.reset_index()
     
-    # Set display options for better formatting
-    pd.set_option('display.max_colwidth', 30)
-    pd.set_option('display.float_format', '{:,.2f}'.format)
+    # Rename inputTokens_count to request_count
+    flattened_stats = flattened_stats.rename(columns={'inputTokens_count': 'request_count'})
     
-    # Select most relevant columns for display
-    display_cols = ['request_count', 'total_tokens', 'avg_tokens_per_request', 'modelId_models']
-    display_df = stats_df[display_cols].copy()
-    
-    # Rename columns for display
-    display_df.columns = ['Requests', 'Total Tokens', 'Avg Tokens/Req', 'Models Used']
-    
-    # Convert to string
-    result += display_df.to_string()
-    
-    # Reset display options
-    pd.reset_option('display.max_colwidth')
-    pd.reset_option('display.float_format')
+    # Add the flattened stats to result
+    result_parts.append(flattened_stats.to_string(index=False))
     
     # Add summary statistics
-    total_days = len(stats_df)
-    total_requests = stats_df['request_count'].sum()
-    total_tokens = stats_df['total_tokens'].sum()
-    avg_daily_requests = stats_df['request_count'].mean()
-    avg_daily_tokens = stats_df['total_tokens'].mean()
+    result_parts.append("\n=== Summary Statistics ===")
     
-    result += "\n\nSummary Statistics:"
-    result += f"\n- Period: {total_days} days"
-    result += f"\n- Total Requests: {total_requests:,}"
-    result += f"\n- Total Tokens: {total_tokens:,}"
-    result += f"\n- Daily Average: {avg_daily_requests:.2f} requests, {avg_daily_tokens:,.2f} tokens"
+    # Total requests and tokens
+    total_requests = flattened_stats['request_count'].sum()
+    total_input_tokens = flattened_stats['inputTokens_sum'].sum()
+    total_completion_tokens = flattened_stats['completionTokens_sum'].sum()
+    total_tokens = flattened_stats['totalTokens_sum'].sum()
     
-    # Add trend analysis
-    if len(stats_df) > 1:
-        result += "\n\nUsage Trend:"
-        # Calculate day-over-day change for the last 3 days
-        if len(stats_df) >= 3:
-            last_three_days = stats_df.head(3).sort_index()
-            day_labels = [d for d in last_three_days.index]
-            
-            for i in range(1, len(last_three_days)):
-                prev_day = last_three_days.iloc[i-1]
-                curr_day = last_three_days.iloc[i]
-                pct_change_tokens = ((curr_day['total_tokens'] - prev_day['total_tokens']) / prev_day['total_tokens']) * 100 if prev_day['total_tokens'] > 0 else 0
-                
-                result += f"\n- {day_labels[i]}: {curr_day['total_tokens']:,.2f} tokens "
-                if pct_change_tokens > 0:
-                    result += f"(↑ {pct_change_tokens:.1f}% from previous day)"
-                elif pct_change_tokens < 0:
-                    result += f"(↓ {abs(pct_change_tokens):.1f}% from previous day)"
-                else:
-                    result += "(no change from previous day)"
+    result_parts.append(f"Total Requests: {total_requests:,}")
+    result_parts.append(f"Total Input Tokens: {total_input_tokens:,}")
+    result_parts.append(f"Total Completion Tokens: {total_completion_tokens:,}")
+    result_parts.append(f"Total Tokens: {total_tokens:,}")
+    
+    # === REGION SUMMARY ===
+    result_parts.append("\n=== Region Summary ===")
+    region_summary = df.groupby('region').agg({
+        'inputTokens': ['count', 'sum'],
+        'completionTokens': ['sum'],
+        'totalTokens': ['sum']
+    })
+    
+    # Flatten region summary columns
+    region_summary.columns = [f"{col[0]}_{col[1]}" for col in region_summary.columns]
+    region_summary = region_summary.reset_index()
+    region_summary = region_summary.rename(columns={'inputTokens_count': 'request_count'})
+    
+    result_parts.append(region_summary.to_string(index=False))
+    
+    # === MODEL SUMMARY ===
+    result_parts.append("\n=== Model Summary ===")
+    model_summary = df.groupby('modelId').agg({
+        'inputTokens': ['count', 'sum'],
+        'completionTokens': ['sum'],
+        'totalTokens': ['sum']
+    })
+    
+    # Flatten model summary columns
+    model_summary.columns = [f"{col[0]}_{col[1]}" for col in model_summary.columns]
+    model_summary = model_summary.reset_index()
+    model_summary = model_summary.rename(columns={'inputTokens_count': 'request_count'})
+    
+    # Format model IDs to be more readable
+    model_summary['modelId'] = model_summary['modelId'].apply(
+        lambda model: model.split('.')[-1] if '.' in model else model.split('/')[-1]
+    )
+    
+    result_parts.append(model_summary.to_string(index=False))
+    
+    # === USER SUMMARY ===
+    if 'userId' in df.columns:
+        result_parts.append("\n=== User Summary ===")
+        user_summary = df.groupby('userId').agg({
+            'inputTokens': ['count', 'sum'],
+            'completionTokens': ['sum'],
+            'totalTokens': ['sum']
+        })
+        
+        # Flatten user summary columns
+        user_summary.columns = [f"{col[0]}_{col[1]}" for col in user_summary.columns]
+        user_summary = user_summary.reset_index()
+        user_summary = user_summary.rename(columns={'inputTokens_count': 'request_count'})
+        
+        result_parts.append(user_summary.to_string(index=False))
+        
+    # === REGION -> USER -> MODEL DETAILED SUMMARY ===
+    if 'userId' in df.columns:
+        result_parts.append("\n=== Region -> User -> Model Detailed Summary ===")
+        region_user_model_summary = df.groupby(['region', 'userId', 'modelId']).agg({
+            'inputTokens': ['count', 'sum', 'mean'],
+            'completionTokens': ['sum', 'mean'],
+            'totalTokens': ['sum', 'mean']
+        })
+        
+        # Flatten columns
+        region_user_model_summary.columns = [f"{col[0]}_{col[1]}" for col in region_user_model_summary.columns]
+        region_user_model_summary = region_user_model_summary.reset_index()
+        region_user_model_summary = region_user_model_summary.rename(columns={'inputTokens_count': 'request_count'})
+        
+        # Format model IDs to be more readable
+        region_user_model_summary['modelId'] = region_user_model_summary['modelId'].apply(
+            lambda model: model.split('.')[-1] if '.' in model else model.split('/')[-1]
+        )
+        
+        result_parts.append(region_user_model_summary.to_string(index=False))
+
+    
+    # Combine all parts into a single string
+    result = "\n".join(result_parts)
+    
+    return result
+
+@mcp.tool()
+def get_bedrock_hourly_usage_stats(params: BedrockLogsParams) -> str:
+    """
+    Get hourly usage statistics with detailed breakdowns.
+
+    Args:
+        params: Parameters specifying the number of days to look back and region
+
+    Returns:
+        str: Formatted string representation of hourly usage statistics
+    """
+    df = get_bedrock_logs(params)
+
+    if df is None or df.empty:
+        return "No usage data found for the specified period."
+    
+    # Initialize result string
+    result_parts = []
+    
+    # Add header
+    result_parts.append(f"Hourly Bedrock Usage Statistics (Past {params.days} days - {params.region})")
+    result_parts.append("=" * 80)
+    
+    # Add date and hour columns for easier grouping
+    df['date'] = df['timestamp'].dt.date
+    df['hour'] = df['timestamp'].dt.hour
+    df['datetime'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:00')
+    
+    # === HOURLY USAGE ANALYSIS ===
+    result_parts.append("\n=== Hourly Usage Analysis ===")
+    
+    # Group by datetime (date + hour)
+    hourly_stats = df.groupby('datetime').agg({
+        'inputTokens': ['count', 'sum', 'mean'],
+        'completionTokens': ['sum', 'mean'],
+        'totalTokens': ['sum', 'mean']
+    })
+    
+    # Flatten the column multi-index
+    hourly_stats.columns = [f"{col[0]}_{col[1]}" for col in hourly_stats.columns]
+    
+    # Reset the index to get a flat dataframe
+    hourly_stats = hourly_stats.reset_index()
+    
+    # Rename inputTokens_count to request_count
+    hourly_stats = hourly_stats.rename(columns={'inputTokens_count': 'request_count'})
+    
+    # Add the hourly stats to result
+    result_parts.append(hourly_stats.to_string(index=False))
+    
+    # === HOURLY REGION -> MODEL GROUPING ===
+    result_parts.append("\n=== Hourly Region-wise -> Model-wise Analysis ===")
+    
+    # Group by datetime, region, model and calculate metrics
+    hourly_region_model_stats = df.groupby(['datetime', 'region', 'modelId']).agg({
+        'inputTokens': ['count', 'sum', 'mean', 'max', 'median'],
+        'completionTokens': ['sum', 'mean', 'max', 'median'],
+        'totalTokens': ['sum', 'mean', 'max', 'median']
+    })
+    
+    # Flatten the column multi-index
+    hourly_region_model_stats.columns = [f"{col[0]}_{col[1]}" for col in hourly_region_model_stats.columns]
+    
+    # Reset the index to get a flat dataframe
+    hourly_region_model_stats = hourly_region_model_stats.reset_index()
+    
+    # Rename inputTokens_count to request_count
+    hourly_region_model_stats = hourly_region_model_stats.rename(columns={'inputTokens_count': 'request_count'})
+    
+    # Format model IDs to be more readable
+    hourly_region_model_stats['modelId'] = hourly_region_model_stats['modelId'].apply(
+        lambda model: model.split('.')[-1] if '.' in model else model.split('/')[-1]
+    )
+    
+    # Add the hourly region-model stats to result
+    result_parts.append(hourly_region_model_stats.to_string(index=False))
+    
+    # Add summary statistics
+    result_parts.append("\n=== Summary Statistics ===")
+    
+    # Total requests and tokens
+    total_requests = hourly_stats['request_count'].sum()
+    total_input_tokens = hourly_stats['inputTokens_sum'].sum()
+    total_completion_tokens = hourly_stats['completionTokens_sum'].sum()
+    total_tokens = hourly_stats['totalTokens_sum'].sum()
+    
+    result_parts.append(f"Total Requests: {total_requests:,}")
+    result_parts.append(f"Total Input Tokens: {total_input_tokens:,}")
+    result_parts.append(f"Total Completion Tokens: {total_completion_tokens:,}")
+    result_parts.append(f"Total Tokens: {total_tokens:,}")
+    
+    # === REGION SUMMARY ===
+    result_parts.append("\n=== Region Summary ===")
+    region_summary = df.groupby('region').agg({
+        'inputTokens': ['count', 'sum'],
+        'completionTokens': ['sum'],
+        'totalTokens': ['sum']
+    })
+    
+    # Flatten region summary columns
+    region_summary.columns = [f"{col[0]}_{col[1]}" for col in region_summary.columns]
+    region_summary = region_summary.reset_index()
+    region_summary = region_summary.rename(columns={'inputTokens_count': 'request_count'})
+    
+    result_parts.append(region_summary.to_string(index=False))
+    
+    # === MODEL SUMMARY ===
+    result_parts.append("\n=== Model Summary ===")
+    model_summary = df.groupby('modelId').agg({
+        'inputTokens': ['count', 'sum'],
+        'completionTokens': ['sum'],
+        'totalTokens': ['sum']
+    })
+    
+    # Flatten model summary columns
+    model_summary.columns = [f"{col[0]}_{col[1]}" for col in model_summary.columns]
+    model_summary = model_summary.reset_index()
+    model_summary = model_summary.rename(columns={'inputTokens_count': 'request_count'})
+    
+    # Format model IDs to be more readable
+    model_summary['modelId'] = model_summary['modelId'].apply(
+        lambda model: model.split('.')[-1] if '.' in model else model.split('/')[-1]
+    )
+    
+    result_parts.append(model_summary.to_string(index=False))
+    
+    # === USER SUMMARY ===
+    if 'userId' in df.columns:
+        result_parts.append("\n=== User Summary ===")
+        user_summary = df.groupby('userId').agg({
+            'inputTokens': ['count', 'sum'],
+            'completionTokens': ['sum'],
+            'totalTokens': ['sum']
+        })
+        
+        # Flatten user summary columns
+        user_summary.columns = [f"{col[0]}_{col[1]}" for col in user_summary.columns]
+        user_summary = user_summary.reset_index()
+        user_summary = user_summary.rename(columns={'inputTokens_count': 'request_count'})
+        
+        result_parts.append(user_summary.to_string(index=False))
+        
+    # === HOURLY REGION -> USER -> MODEL DETAILED SUMMARY ===
+    if 'userId' in df.columns:
+        result_parts.append("\n=== Hourly Region -> User -> Model Detailed Summary ===")
+        hourly_region_user_model_summary = df.groupby(['datetime', 'region', 'userId', 'modelId']).agg({
+            'inputTokens': ['count', 'sum', 'mean'],
+            'completionTokens': ['sum', 'mean'],
+            'totalTokens': ['sum', 'mean']
+        })
+        
+        # Flatten columns
+        hourly_region_user_model_summary.columns = [f"{col[0]}_{col[1]}" for col in hourly_region_user_model_summary.columns]
+        hourly_region_user_model_summary = hourly_region_user_model_summary.reset_index()
+        hourly_region_user_model_summary = hourly_region_user_model_summary.rename(columns={'inputTokens_count': 'request_count'})
+        
+        # Format model IDs to be more readable
+        hourly_region_user_model_summary['modelId'] = hourly_region_user_model_summary['modelId'].apply(
+            lambda model: model.split('.')[-1] if '.' in model else model.split('/')[-1]
+        )
+        
+        result_parts.append(hourly_region_user_model_summary.to_string(index=False))
+    
+    # === HOURLY USAGE PATTERN ANALYSIS ===
+    result_parts.append("\n=== Hourly Usage Pattern Analysis ===")
+    
+    # Group by hour of day (ignoring date) to see hourly patterns
+    hour_pattern = df.groupby(df['timestamp'].dt.hour).agg({
+        'inputTokens': ['count', 'sum'],
+        'totalTokens': ['sum']
+    })
+    
+    # Flatten hour pattern columns
+    hour_pattern.columns = [f"{col[0]}_{col[1]}" for col in hour_pattern.columns]
+    hour_pattern = hour_pattern.reset_index()
+    hour_pattern = hour_pattern.rename(columns={
+        'timestamp': 'hour_of_day',
+        'inputTokens_count': 'request_count'
+    })
+    
+    # Format the hour to be more readable
+    hour_pattern['hour_of_day'] = hour_pattern['hour_of_day'].apply(
+        lambda hour: f"{hour:02d}:00 - {hour:02d}:59"
+    )
+    
+    result_parts.append(hour_pattern.to_string(index=False))
+    
+    # Combine all parts into a single string
+    result = "\n".join(result_parts)
     
     return result
 
