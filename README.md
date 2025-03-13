@@ -72,20 +72,22 @@ There are two ways to configure this tool with Claude Desktop:
 #### Option 1: Using Docker
 
 Add the following to your Claude Desktop configuration file. The file can be found out these paths depending upon you operating system.
-  - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json.
-  - Windows: %APPDATA%\Claude\claude_desktop_config.json.
-  - Linux: ~/.config/Claude/claude_desktop_config.json.
+
+- macOS: ~/Library/Application Support/Claude/claude_desktop_config.json.
+- Windows: %APPDATA%\Claude\claude_desktop_config.json.
+- Linux: ~/.config/Claude/claude_desktop_config.json.
 
 ```json
 {
   "mcpServers": {
     "aws-cost-explorer": {
       "command": "docker",
-      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "aws-cost-explorer-mcp:latest" ],
+      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "-e", "", "aws-cost-explorer-mcp:latest" ],
       "env": {
         "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
-        "AWS_REGION": "us-east-1"
+        "AWS_REGION": "us-east-1",
+        "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME"
       }
     }
   }
@@ -108,7 +110,13 @@ If you prefer to run the server directly without Docker, you can use UV:
           "/path/to/aws-cost-explorer-mcp-server",
           "run",
           "server.py"
-      ]
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
+        "AWS_REGION": "us-east-1",
+        "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME"
+      }
     }
   }
 }

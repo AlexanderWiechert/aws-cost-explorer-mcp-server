@@ -3,6 +3,8 @@ AWS Cost Explorer MCP Server.
 
 This server provides MCP tools to interact with AWS Cost Explorer API.
 """
+import os
+import argparse
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
@@ -15,6 +17,8 @@ from pydantic import BaseModel, Field
 from tabulate import tabulate
 
 
+# global variables
+mcp_state = {}
 class DaysParam(BaseModel):
     """Parameters for specifying the number of days to look back."""
     
@@ -36,6 +40,10 @@ class BedrockLogsParams(BaseModel):
     region: str = Field(
         default="us-east-1",
         description="AWS region to retrieve logs from"
+    )
+    log_group_name: str = Field(
+        description="Bedrock Log Group Name",
+        default=os.environ.get('BEDROCK_LOG_GROUP_NAME', 'BedrockModelInvocationLogGroup')
     )
 
 
@@ -74,16 +82,16 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
     try:
         paginator = client.get_paginator("filter_log_events")
 
-        # Parameters for the log query
+        # Parameters for the log query        
         query_params = {
-            "logGroupName": "BedrockModelInvocationLogGroup",  # The main log group
+            "logGroupName": params.log_group_name,  # Use the provided log group name
             "logStreamNames": [
                 "aws/bedrock/modelinvocations"
             ],  # The specific log stream
             "startTime": start_time_ms,
             "endTime": end_time_ms,
         }
-
+        
         # Paginate through results
         for page in paginator.paginate(**query_params):
             for event in page.get("events", []):
@@ -138,7 +146,7 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
 
     except client.exceptions.ResourceNotFoundException:
         print(
-            f"Log group 'BedrockModelInvocationLogGroup' or stream 'aws/bedrock/modelinvocations' not found"
+            f"Log group '{params.log_group_name}' or stream 'aws/bedrock/modelinvocations' not found"
         )
         return None
     except Exception as e:
@@ -825,9 +833,24 @@ def get_instance_type_breakdown(ce_client, date, region, service, dimension_key)
     
     return None
 
+@mcp.resource("config://app")
+def get_config() -> str:
+    """Static configuration data"""
+    return "App configuration here"
+
 def main():
-    # Run the server with SSE transport
-    mcp.run(transport='stdio')
+    # Set up command line arguments parser
+    parser = argparse.ArgumentParser(description="AWS Cost Explorer MCP Server")
+    parser.add_argument("--transport", 
+                        type=str, 
+                        choices=["stdio", "sse"],
+                        default="sse",
+                        help="Transport method (stdio or sse)")
+    
+    args = parser.parse_args()
+    
+    # Run the server with the specified transport
+    mcp.run(transport=args.transport)
 
 if __name__ == "__main__":
     main()
