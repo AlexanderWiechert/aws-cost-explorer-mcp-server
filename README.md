@@ -71,7 +71,10 @@ There are two ways to configure this tool with Claude Desktop:
 
 #### Option 1: Using Docker
 
-Add the following to your Claude Desktop configuration file:
+Add the following to your Claude Desktop configuration file. The file can be found out these paths depending upon you operating system.
+  - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json.
+  - Windows: %APPDATA%\Claude\claude_desktop_config.json.
+  - Linux: ~/.config/Claude/claude_desktop_config.json.
 
 ```json
 {
