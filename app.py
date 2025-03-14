@@ -3,80 +3,37 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from langchain_aws import ChatBedrock
 import asyncio
-import re
-from typing import Dict, Any, List
 
 # Initialize the model
 model = ChatBedrock(model="us.anthropic.claude-3-5-haiku-20241022-v1:0")
 
-# Helper function to parse and format response content
-def format_response(response: Dict[Any, Any]) -> Dict[str, Any]:
-    """
-    Format the LangChain response to correctly handle markdown and code blocks.
-    
-    Args:
-        response: The raw response from the LangChain agent
-        
-    Returns:
-        A dictionary with properly formatted content
-    """
-    if not response or "messages" not in response:
-        return {"content": "No valid response received"}
-    
-    # Extract the content from the last message
-    if isinstance(response["messages"], list) and response["messages"]:
-        last_message = response["messages"][-1]
-        
-        if isinstance(last_message, dict) and "content" in last_message:
-            return last_message
-        else:
-            # Handle string content
-            content = str(last_message)
-    else:
-        content = str(response)
-    
-    return {"content": content}
-
-# Extract and format tool steps if present
-def extract_tool_steps(response: Dict[Any, Any]) -> List[Dict[str, Any]]:
-    """
-    Extract tool steps from the response for display in the UI.
-    
-    Args:
-        response: The raw response from the LangChain agent
-        
-    Returns:
-        A list of tool steps to display
-    """
-    steps = []
-    
-    # Check if there are tool calls in the response
-    if "intermediate_steps" in response:
-        for step in response["intermediate_steps"]:
-            if len(step) >= 2:
-                # Extract tool call and result
-                tool_call = step[0]
-                tool_result = step[1]
-                
-                steps.append({
-                    "name": tool_call.tool if hasattr(tool_call, "tool") else "Tool",
-                    "input": tool_call.tool_input if hasattr(tool_call, "tool_input") else str(tool_call),
-                    "output": str(tool_result)
-                })
-    
-    return steps
-
 @cl.on_chat_start
 async def start():
-    await cl.Message("Chatbot is ready! Ask me anything.").send()
+    welcome_message = """
+# 👋 Welcome to your AWS cost explorer assistant.
+    
+I'm ready to help you with your questions related to your AWS spend. How can I help you save today?
+    """
+    await cl.Message(content=welcome_message).send()
+    
+    # Initialize conversation history with a system message at the beginning
+    cl.user_session.set(
+        "message_history",
+        []  # Start with an empty history - we'll add the system message when formatting for the agent
+    )
 
 @cl.on_message
 async def main(message: cl.Message):
-    # Create a message with a thinking effect
-    msg = cl.Message(content="")
-    await msg.send()
+    # Get the conversation history
+    message_history = cl.user_session.get("message_history")
     
-
+    # Add the current user message to history
+    #if len(message_history) > 0:
+    message_history.append({"role": "user", "content": message.content})
+    
+    # Show a thinking message
+    thinking_msg = cl.Message(content="Thinking...")
+    await thinking_msg.send()
     
     try:
         async with MultiServerMCPClient(
@@ -87,29 +44,68 @@ async def main(message: cl.Message):
                 }
             }
         ) as client:
+            # Create the agent
             agent = create_react_agent(
                 model, 
                 client.get_tools(), 
-                prompt="You are an AI assistant, use your knowledge and tools provided to you to answer user questions"
+                #prompt="You are an AI assistant, use your knowledge and tools provided to you to answer user questions"
             )
+            
+            # Format messages for the agent - ensure system message is first
+            formatted_messages = [
+                {"role": "system", "content": "You are a helpful AI assistant. Answer the user's questions accurately and concisely."}
+            ]
+            # Add the rest of the conversation history
+            formatted_messages.extend(message_history)
         
-            # Invoke the agent
-            response = await agent.ainvoke({"messages": [{"role": "user", "content": message.content}]})
+            # Invoke the agent with properly formatted message history
+            print(f"formatted_messages={formatted_messages}")
+            response = await agent.ainvoke({"messages": formatted_messages})
             
-            # Format the response
-            formatted_response = format_response(response)
+            # Remove the thinking message
+            await thinking_msg.remove()
             
-            # Extract any tool steps
-            steps = extract_tool_steps(response)
-            
-            # Update the message with the formatted content
-            msg = cl.Message(content=formatted_response["content"], elements=steps)
-            await msg.send()
-            
+            # Extract the content from the response
+            if response and "messages" in response and response["messages"]:
+                last_message = response["messages"][-1]
+                
+                if isinstance(last_message, dict) and "content" in last_message:
+                    content = last_message["content"]
+                else:
+                    content = str(last_message.content)
+                
+                # Add the assistant's response to the conversation history
+                message_history.append({"role": "assistant", "content": content})
+                
+                # Save the updated history (without system message)
+                cl.user_session.set("message_history", message_history)
+                
+                # Send the message
+                await cl.Message(content=content).send()
+            else:
+                await cl.Message(content="No valid response received").send()
+                
     except Exception as e:
-        # Handle any errors that occur
-        msg = cl.Message(content=f"Error: {str(e)}")
-        await msg.send()
+        # Remove the thinking message
+        await thinking_msg.remove()
+        
+        # Send error message
+        error_message = f"""
+## ❌ Error Occurred
+
+```
+{str(e)}
+```
+
+Please try again or check your query.
+        """
+        await cl.Message(content=error_message, author="System").send()
+        
+        # Print error to console for debugging
+        print(f"Error: {str(e)}")
 
 if __name__ == "__main__":
-    cl.run()
+    cl.run(
+        title="Claude Assistant",
+        description="A simple interface for Claude"
+    )
