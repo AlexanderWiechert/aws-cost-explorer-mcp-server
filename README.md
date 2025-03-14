@@ -44,7 +44,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 3. Set up the Python virtual environment and install dependencies:
    ```
-   uv venv && source .venv/bin/activate && uv pip sync pyproject.toml
+   uv venv --python 3.12 && source .venv/bin/activate && uv pip sync pyproject.toml
    ```
    
 4. Configure your AWS credentials:
@@ -82,12 +82,13 @@ Add the following to your Claude Desktop configuration file. The file can be fou
   "mcpServers": {
     "aws-cost-explorer": {
       "command": "docker",
-      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "-e", "", "aws-cost-explorer-mcp:latest" ],
+      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "-e", "BEDROCK_LOG_GROUP_NAME", "-e", "MCP_TRANSPORT", "aws-cost-explorer-mcp:latest" ],
       "env": {
         "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
         "AWS_REGION": "us-east-1",
-        "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME"
+        "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME",
+        "MCP_TRANSPORT": "stdio"
       }
     }
   }
@@ -115,7 +116,8 @@ If you prefer to run the server directly without Docker, you can use UV:
         "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
         "AWS_REGION": "us-east-1",
-        "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME"
+        "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME",
+        "MCP_TRANSPORT": "stdio"
       }
     }
   }

@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN uv pip install --no-cache --system -e .
 RUN mkdir -p /root/.aws
 
 # Expose port for SSE transport
-# EXPOSE 8000
+EXPOSE 8000
 
 # Run the MCP server
 CMD ["python", "server.py"]

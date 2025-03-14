@@ -17,8 +17,7 @@ from pydantic import BaseModel, Field
 from tabulate import tabulate
 
 
-# global variables
-mcp_state = {}
+
 class DaysParam(BaseModel):
     """Parameters for specifying the number of days to look back."""
     
@@ -35,7 +34,7 @@ class BedrockLogsParams(BaseModel):
         default=7,
         description="Number of days to look back for Bedrock logs",
         ge=1,
-        le=30
+        le=90
     )
     region: str = Field(
         default="us-east-1",
@@ -839,19 +838,8 @@ def get_config() -> str:
     return "App configuration here"
 
 def main():
-    # Set up command line arguments parser
-    parser = argparse.ArgumentParser(description="AWS Cost Explorer MCP Server")
-    parser.add_argument("--transport", 
-                        type=str, 
-                        choices=["stdio", "sse"],
-                        default="sse",
-                        help="Transport method (stdio or sse)")
-    
-    args = parser.parse_args()
-    
     # Run the server with the specified transport
-    mcp.run(transport=args.transport)
+    mcp.run(transport=os.environ.get('MCP_TRANSPORT', 'stdio'))
 
 if __name__ == "__main__":
     main()
-    
