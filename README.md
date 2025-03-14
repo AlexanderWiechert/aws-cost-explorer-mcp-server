@@ -60,6 +60,8 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 ## Usage
 
+### Prerequisites
+
 1. Setup [model invocation logs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#setup-cloudwatch-logs-destination) in Amazon CloudWatch.
 1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP server to retrieve data from these services.
 
