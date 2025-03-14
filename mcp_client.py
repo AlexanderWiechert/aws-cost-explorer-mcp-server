@@ -15,7 +15,8 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
     )
 
 async def run():
-    server_url = "http://localhost:8000/sse"
+    #server_url = "http://localhost:8000/sse"
+    server_url = "http://ec2-44-192-72-20.compute-1.amazonaws.com:8000/sse"
     async with sse_client(server_url) as (read, write):
         async with ClientSession(read, write, sampling_callback=handle_sampling_message) as session:
             # Initialize the connection
