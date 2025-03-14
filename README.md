@@ -61,7 +61,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 ## Usage
 
 1. Setup [model invocation logs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#setup-cloudwatch-logs-destination) in Amazon CloudWatch.
-1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP to retrieve data from these services.
+1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP server to retrieve data from these services.
 
 ### Local setup
 
@@ -169,7 +169,7 @@ python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME
 
 #### Testing with Chainlit app
 
-The `app.py` file in this repo provides a Chainlit app (chatbot) which creates a LangGraph agent that uses the [`LangChain MCP Adapter`]() to import the tools provided by the MCP server as tools in a LangGraph Agent. The Agent is then able to use an LLM to respond to user questions and use the tools available to it as needed. Thus if the user asks a question such as "_What was my Bedrock usage like in the last one week?_" then the Agent will use the tools available to it via the remote MCP server to answer that question. We use Claude 3.5 Haiku model available via Amazon Bedrock to power this agent.
+The `app.py` file in this repo provides a Chainlit app (chatbot) which creates a LangGraph agent that uses the [`LangChain MCP Adapter`](https://github.com/langchain-ai/langchain-mcp-adapters) to import the tools provided by the MCP server as tools in a LangGraph Agent. The Agent is then able to use an LLM to respond to user questions and use the tools available to it as needed. Thus if the user asks a question such as "_What was my Bedrock usage like in the last one week?_" then the Agent will use the tools available to it via the remote MCP server to answer that question. We use Claude 3.5 Haiku model available via Amazon Bedrock to power this agent.
 
 Run the Chainlit app using:
 
