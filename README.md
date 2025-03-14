@@ -1,6 +1,8 @@
-# AWS Cost Explorer MCP
+# AWS Cost Explorer and Amazon Bedrock Model Invocation Logs MCP Server & Client
 
-A command-line interface and API for interacting with AWS Cost Explorer data through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol).
+An MCP server for getting AWS spend data via Cost Explorer and Amazon Bedrock usage data via [`Model invocation logs`](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html) in Amazon Cloud Watch through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol).
+
+You can run the MCP server locally and access it via the Claude Desktop or you could also run a Remote MCP server on Amazon EC2 and access it via a MCP client built into a LangGraph Agent.
 
 ### Demo video
 
@@ -12,16 +14,19 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 ## Features
 
-- **EC2 Spend Analysis**: View detailed breakdowns of EC2 spending for the last day
+- **Amazon EC2 Spend Analysis**: View detailed breakdowns of EC2 spending for the last day
+- **Amazon Bedrock Spend Analysis**: View breakdown by region, users and models over the last 30 days
 - **Service Spend Reports**: Analyze spending across all AWS services for the last 30 days
 - **Detailed Cost Breakdown**: Get granular cost data by day, region, service, and instance type
 - **Interactive Interface**: Use Claude to query your cost data through natural language
 
 ## Requirements
 
-- Python 3.13+
+- Python 3.12
 - AWS credentials with Cost Explorer access
 - Anthropic API access (for Claude integration)
+- [Optional] Amazon Bedrock access (for LangGraph Agent)
+- [Optional] Amazon EC2 for running a remote MCP server
 
 ## Installation
 
@@ -55,21 +60,28 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 ## Usage
 
-### Starting the Server
+1. Setup [model invocation logs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#setup-cloudwatch-logs-destination) in Amazon CloudWatch.
+1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP to retrieve data from these services.
+
+### Local setup
+
+Uses `stdio` as a transport for MCP, both the MCP server and client are running on your local machine.
+
+#### Starting the Server (local)
 
 Run the server using:
 
 ```
+export MCP_TRANSPORT=stdio
+export BEDROCK_LOG_GROUP_NAME=YOUR_BEDROCK_CW_LOG_GROUP_NAME
 python server.py
 ```
 
-By default, the server uses stdio transport for communication with MCP clients.
-
-### Claude Desktop Configuration
+#### Claude Desktop Configuration
 
 There are two ways to configure this tool with Claude Desktop:
 
-#### Option 1: Using Docker
+##### Option 1: Using Docker
 
 Add the following to your Claude Desktop configuration file. The file can be found out these paths depending upon you operating system.
 
@@ -97,7 +109,7 @@ Add the following to your Claude Desktop configuration file. The file can be fou
 
 > **IMPORTANT**: Replace `YOUR_ACCESS_KEY_ID` and `YOUR_SECRET_ACCESS_KEY` with your actual AWS credentials. Never commit actual credentials to version control.
 
-#### Option 2: Using UV (without Docker)
+##### Option 2: Using UV (without Docker)
 
 If you prefer to run the server directly without Docker, you can use UV:
 
@@ -126,17 +138,61 @@ If you prefer to run the server directly without Docker, you can use UV:
 
 Make sure to replace the directory path with the actual path to your repository on your system.
 
+### Remote setup
+
+Uses `sse` as a transport for MCP, the MCP servers on EC2 and the client is running on your local machine. Note that Claude Desktop does not support remote MCP servers at this time (see [this](https://github.com/orgs/modelcontextprotocol/discussions/16) GitHub issue).
+
+#### Starting the Server (remote)
+
+You can start a remote MCP server on Amazon EC2 by following the same instructions as above. Make sure to set the `MCP_TRANSPORT` as `sse` (server side events) as shown below. **Note that the MCP protocol runs over JSON-RPC2.0, this protocol in and of itself is not secure over the network, do not send or receive sensitive data over MCP**.
+
+Run the server using:
+
+```
+export MCP_TRANSPORT=sse
+export BEDROCK_LOG_GROUP_NAME=YOUR_BEDROCK_CW_LOG_GROUP_NAME
+python server.py
+```
+
+1. The MCP server will start listening on TCP port 8000.
+1. Configure an ingress rule in the security group associated with your EC2 instance to allow access to TCP port 8000 from your local machine (where you are running the MCP client/LangGraph based app) to your EC2 instance.
+
+#### Testing with a CLI MCP client
+
+You can test your remote MCP server with the `mcp_sse_client.py` script. Running this script will print the list of tools available from the MCP server and an output for the `get_bedrock_daily_usage_stats` tool.
+
+```{.bashrc}
+MCP_SERVER_HOSTNAME=YOUR_MCP_SERVER_EC2_HOSTNAME
+python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME
+```
+
+
+#### Testing with Chainlit app
+
+The `app.py` file in this repo provides a Chainlit app (chatbot) which creates a LangGraph agent that uses the [`LangChain MCP Adapter`]() to import the tools provided by the MCP server as tools in a LangGraph Agent. The Agent is then able to use an LLM to respond to user questions and use the tools available to it as needed. Thus if the user asks a question such as "_What was my Bedrock usage like in the last one week?_" then the Agent will use the tools available to it via the remote MCP server to answer that question. We use Claude 3.5 Haiku model available via Amazon Bedrock to power this agent.
+
+Run the Chainlit app using:
+
+```{.bashrc}
+chainlit run app.py --port 8080 
+```
+
+A browser window should open up on `localhost:8080` and you should be able to use the chatbot to get details about your AWS spend.
+
 ### Available Tools
 
 The server exposes the following tools that Claude can use:
 
 1. **`get_ec2_spend_last_day()`**: Retrieves EC2 spending data for the previous day
 1. **`get_detailed_breakdown_by_day(days=7)`**: Delivers a comprehensive analysis of costs by region, service, and instance type
+1. **`get_bedrock_daily_usage_stats(days=7, region='us-east-1', log_group_name='BedrockModelInvocationLogGroup')`**: Delivers a per-day breakdown of model usage by region and users.
+1. **`get_bedrock_hourly_usage_stats(days=7, region='us-east-1', log_group_name='BedrockModelInvocationLogGroup')`**: Delivers a per-day per-hour breakdown of model usage by region and users.
 
 ### Example Queries
 
 Once connected to Claude through an MCP-enabled interface, you can ask questions like:
 
+- "Help me understand my Bedrock spend over the last few weeks"
 - "What was my EC2 spend yesterday?"
 - "Show me my top 5 AWS services by cost for the last month"
 - "Analyze my spending by region for the past 14 days"
