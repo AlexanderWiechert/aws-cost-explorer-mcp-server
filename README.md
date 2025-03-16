@@ -2,6 +2,23 @@
 
 An MCP server for getting AWS spend data via Cost Explorer and Amazon Bedrock usage data via [`Model invocation logs`](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html) in Amazon Cloud Watch through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol).
 
+```mermaid
+flowchart LR
+    User([User]) --> UserApp[User Application]
+    UserApp --> |Queries| Host[Host]
+    
+    subgraph "Claude Desktop"
+        Host --> MCPClient[MCP Client]
+    end
+    
+    MCPClient --> |MCP Protocol| MCPServer[AWS Cost Explorer MCP Server]
+    
+    subgraph "AWS Services"
+        MCPServer --> |API Calls| CostExplorer[(AWS Cost Explorer)]
+        MCPServer --> |API Calls| CloudWatchLogs[(AWS CloudWatch Logs)]
+    end
+```
+
 You can run the MCP server locally and access it via the Claude Desktop or you could also run a Remote MCP server on Amazon EC2 and access it via a MCP client built into a LangGraph Agent.
 
 ### Demo video
