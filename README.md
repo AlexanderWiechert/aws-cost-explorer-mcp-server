@@ -3,6 +3,7 @@
 An MCP server for getting AWS spend data via Cost Explorer and Amazon Bedrock usage data via [`Model invocation logs`](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html) in Amazon Cloud Watch through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol).
 
 ```mermaid
+%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '16px'}, "flowchart": {"htmlLabels": true}, "securityLevel": "loose"}}%%
 flowchart LR
     User([User]) --> UserApp[User Application]
     UserApp --> |Queries| Host[Host]
