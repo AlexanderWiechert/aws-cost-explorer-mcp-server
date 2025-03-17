@@ -66,7 +66,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 3. Set up the Python virtual environment and install dependencies:
    ```
-   uv venv --python 3.12 && source .venv/bin/activate && uv pip sync pyproject.toml
+   uv venv --python 3.12 && source .venv/bin/activate && uv pip install --requirement pyproject.toml
    ```
    
 4. Configure your AWS credentials:
