@@ -165,12 +165,6 @@ Uses `sse` as a transport for MCP, the MCP servers on EC2 and the client is runn
 
 You can start a remote MCP server on Amazon EC2 by following the same instructions as above. Make sure to set the `MCP_TRANSPORT` as `sse` (server side events) as shown below. **Note that the MCP uses JSON-RPC 2.0 as its wire format, therefore the protocol itself does not include authorization and authentication (see [this GitHub issue](https://github.com/modelcontextprotocol/specification/discussions/102)), do not send or receive sensitive data over MCP**.
 
-nsports - Model Context Protocol
-
-modelcontextprotocol.io
-https://modelcontextprotocol.io › docs › concepts › tran...
-MCP uses JSON-RPC 2.0 as its wire format
-
 Run the server using:
 
 ```
