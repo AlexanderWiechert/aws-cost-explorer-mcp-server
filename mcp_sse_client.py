@@ -4,10 +4,10 @@ It shows how to access the different MCP server capabilities (prompts, tools etc
 supported by the protocol. See: https://modelcontextprotocol.io/docs/concepts/architecture.
 
 Usage: 
-  python mcp_client.py [--host HOSTNAME] [--port PORT]
+  python mcp_sse_client.py [--host HOSTNAME] [--port PORT]
 
 Example:
-  python mcp_client.py --host ec2-44-192-72-20.compute-1.amazonaws.com --port 8000
+  python mcp_sse_client.py --host ec2-44-192-72-20.compute-1.amazonaws.com --port 8000
 """
 import argparse
 from mcp import types
@@ -74,8 +74,13 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
     
-    # Build the server URL
-    server_url = f"http://{args.host}:{args.port}/sse"
+    # Build the server 
+    secure = ''
+    
+    # Automatically turn to https if port is 443
+    if args.port == 443:
+        secure = 's'
+    server_url = f"http{secure}://{args.host}:{args.port}/sse"
     
     # Run the async main function
     import asyncio

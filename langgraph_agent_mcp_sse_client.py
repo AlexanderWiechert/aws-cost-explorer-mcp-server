@@ -14,7 +14,7 @@ Usage:
     python langgraph_mcp_client.py --host hostname --port port --model model_id --message "your question"
 
 Example:
-    python langgraph_mcp_client.py --host ec2-44-192-72-20.compute-1.amazonaws.com --port 8000 \
+    python langgraph_mcp_sse_client.py --host ec2-44-192-72-20.compute-1.amazonaws.com --port 8000 \
         --model anthropic.claude-3-haiku-20240307-v1:0 --message "my bedrock usage in last 7 days?"
 """
 
@@ -40,7 +40,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--port', type=int, default=8000,
                         help='Port of the MCP server')
     parser.add_argument('--server-name', type=str, default='weather',
-                        help='Server name identifier in the configuration')
+                         help='Server name identifier in the configuration')
     
     # Model arguments
     parser.add_argument('--model', type=str, default='anthropic.claude-3-haiku-20240307-v1:0',
@@ -68,15 +68,14 @@ async def main():
     args = parse_arguments()
     
     # Display configuration
-    print(f"Connecting to MCP server: http://{args.host}:{args.port}/sse")
+    secure = 's' if args.port == 443 else ''
+    server_url = f"http{secure}://{args.host}:{args.port}/sse"
+    print(f"Connecting to MCP server: {server_url}")
     print(f"Using model: {args.model}")
     print(f"Message: {args.message}")
     
     # Initialize the model
     model = ChatBedrock(model_id=args.model)
-    
-    # Build the server URL
-    server_url = f"http://{args.host}:{args.port}/sse"
     
     try:
         # Initialize MCP client with the server configuration

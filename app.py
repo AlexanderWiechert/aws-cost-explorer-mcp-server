@@ -28,7 +28,8 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 # Get configuration from environment variables with defaults
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "ec2-44-192-72-20.compute-1.amazonaws.com")
 MCP_SERVER_PORT = os.getenv("MCP_SERVER_PORT", "8000")
-FULL_MCP_URL = f"http://{MCP_SERVER_URL}:{MCP_SERVER_PORT}/sse"
+SECURE = 's' if MCP_SERVER_PORT == "443" else ''
+FULL_MCP_URL = f"http{SECURE}://{MCP_SERVER_URL}:{MCP_SERVER_PORT}/sse"
 
 # Print configuration at module load time
 print(f"MCP Server configured at: {FULL_MCP_URL}")
