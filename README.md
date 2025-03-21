@@ -11,7 +11,7 @@ flowchart LR
         Host --> MCPClient[MCP Client]
     end
     
-    MCPClient --> |MCP Protocol| MCPServer[AWS Cost Explorer MCP Server]
+    MCPClient --> |MCP Protocol over HTTPS| MCPServer[AWS Cost Explorer MCP Server]
     
     subgraph "AWS Services"
         MCPServer --> |API Calls| CostExplorer[(AWS Cost Explorer)]
