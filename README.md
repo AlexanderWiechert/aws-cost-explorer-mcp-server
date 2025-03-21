@@ -1,6 +1,6 @@
 # AWS Cost Explorer and Amazon Bedrock Model Invocation Logs MCP Server & Client
 
-An MCP server for getting AWS spend data via Cost Explorer and Amazon Bedrock usage data via [`Model invocation logs`](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html) in Amazon Cloud Watch through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol).
+An MCP server for getting AWS spend data via Cost Explorer and Amazon Bedrock usage data via [`Model invocation logs`](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html) in Amazon Cloud Watch through [Anthropic's MCP (Model Control Protocol)](https://www.anthropic.com/news/model-context-protocol). See section on ["secure" remote MCP server](#secure-remote-mcp-server) to see how you can run your MCP server over HTTPS.
 
 ```mermaid
 flowchart LR
@@ -264,8 +264,7 @@ We can use [`nginx`](https://nginx.org/) as a reverse-proxy so that it can provi
 1. Get the hostname for your EC2 instance, this would be needed for configuring the `nginx` reverse proxy.
 
     ```{.bashrc}
-    TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") \
-  && curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-hostname
+    TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") && curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-hostname
     ```
 
 1. Copy the following content into a new file `/etc/nginx/conf.d/ec2.conf`. Replace `YOUR_EC2_HOSTNAME`, `/etc/ssl/certs/cert.pem` and `/etc/ssl/privatekey/privkey.pem` with values appropriate for your setup.
@@ -316,8 +315,22 @@ We can use [`nginx`](https://nginx.org/) as a reverse-proxy so that it can provi
 1. On the client side now (say on your laptop or in your Agent) configure your MCP client to communicate to your MCP server as follows.
 
     ```{.bashrc}
-    MCP_SERVER_HOSTNAME=YOUR_MCP_SERVER_EC2_HOSTNAME
+    MCP_SERVER_HOSTNAME=YOUR_MCP_SERVER_DOMAIN_NAME
     python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME --port 443
+    ```
+
+    Similarly you could run the chainlit app to talk to remote MCP server over HTTPS.
+
+    ```{.bashrc}
+    export MCP_SERVER_URL=YOUR_MCP_SERVER_DOMAIN_NAME
+    export MCP_SERVER_PORT=443
+    chainlit run app.py --port 8080
+    ```
+
+    Similarly you could run the LangGraph Agent to talk to remote MCP server over HTTPS.
+
+    ```{.bashrc}
+    python langgraph_agent_mcp_sse_client.py --host YOUR_MCP_SERVER_DOMAIN_NAME --port 443 
     ```
 
 ## License
