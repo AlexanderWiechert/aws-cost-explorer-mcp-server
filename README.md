@@ -27,7 +27,7 @@ You can run the MCP server locally and access it via the Claude Desktop or you c
 
 ## Overview
 
-This tool provides a convenient way to analyze and visualize AWS cloud spending data using Anthropic's Claude model as an interactive interface. It functions as an MCP server that exposes AWS Cost Explorer API functionality to Claude, allowing you to ask questions about your AWS costs in natural language.
+This tool provides a convenient way to analyze and visualize AWS cloud spending data using Anthropic's Claude model as an interactive interface. It functions as an MCP server that exposes AWS Cost Explorer API functionality to Claude Desktop, allowing you to ask questions about your AWS spend ~~costs~~ in natural language.
 
 ## Features
 
@@ -53,12 +53,14 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
    
+   
    ```powershell
    # On Windows
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    ```
+   Additional installation options are documented [here](https://docs.astral.sh/uv/getting-started/installation/)
 
-2. Clone this repository:
+2. Clone this repository: (assuming this will be updated to point to aws-samples?)
    ```
    git clone https://github.com/aarora79/aws-cost-explorer-mcp.git
    cd aws-cost-explorer-mcp
@@ -74,6 +76,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
    mkdir -p ~/.aws
    # Set up your credentials in ~/.aws/credentials and ~/.aws/config
    ```
+   If you useAWS IAM Identity Center, follow the [docs](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html) to configure your short-term credentials
 
 ## Usage
 
@@ -81,6 +84,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 1. Setup [model invocation logs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#setup-cloudwatch-logs-destination) in Amazon CloudWatch.
 1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP server to retrieve data from these services.
+See [here](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/billing-example-policies.html) and [here](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/CloudWatchLogsReadOnlyAccess.html) for sample poliy examples that you can use & modify as per your requirements.
 
 ### Local setup
 
@@ -218,6 +222,7 @@ Once connected to Claude through an MCP-enabled interface, you can ask questions
 - "Show me my top 5 AWS services by cost for the last month"
 - "Analyze my spending by region for the past 14 days"
 - "Which instance types are costing me the most money?"
+- "Which services had the highest month-over-month cost increase?“
 
 ## Docker Support
 
@@ -251,7 +256,7 @@ We can use [`nginx`](https://nginx.org/) as a reverse-proxy so that it can provi
 
 1. Enable access to TCP port 443 from the IP address of your MCP client (your laptop, or anywhere) in the inbound rules in the security group associated with your EC2 instance.
 
-1. You would need to have an HTTPS certificate and private key to proceed. Let's say you use `your-mcp-server-domain-name.com` as the domain for your MCP server then you will need an SSL cert for `your-mcp-server-domain-name.com` and it will be accessible to MCP clients as `https://your-mcp-server-domain-name.com/sse`. _While you can use a self-signed cert but it would require disabling SSL verification on the MCP client, we DO NOT recommend you do that_. If you are hosting your MCP server on EC2 then you could generate an SSL cert using [no-ip](https://www.noip.com/) or other similar services. Place the SSL cert and private key files in `/etc/ssl/certs` and `/etc/ssl/privatekey` folders respectively on your EC2 machine.
+1. You would need to have an HTTPS certificate and private key to proceed. Let's say you use `your-mcp-server-domain-name.com` as the domain for your MCP server then you will need an SSL cert for `your-mcp-server-domain-name.com` and it will be accessible to MCP clients as `https://your-mcp-server-domain-name.com/sse`. _While you can use a self-signed cert but it would require disabling SSL verification on the MCP client, we DO NOT recommend you do that_. If you are hosting your MCP server on EC2 then you could generate an SSL cert using [no-ip](https://www.noip.com/) (I suggest [Let' Encrypt](https://letsencrypt.org/) as it is free and audited) or other similar services. Place the SSL cert and private key files in `/etc/ssl/certs` and `/etc/ssl/privatekey` folders respectively on your EC2 machine.
 
 1. Install `nginx` on your EC2 machine using the following commands.
 
