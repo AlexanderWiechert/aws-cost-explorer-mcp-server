@@ -27,7 +27,7 @@ You can run the MCP server locally and access it via the Claude Desktop or you c
 
 ## Overview
 
-This tool provides a convenient way to analyze and visualize AWS cloud spending data using Anthropic's Claude model as an interactive interface. It functions as an MCP server that exposes AWS Cost Explorer API functionality to Claude Desktop, allowing you to ask questions about your AWS spend ~~costs~~ in natural language.
+This tool provides a convenient way to analyze and visualize AWS cloud spending data using Anthropic's Claude model as an interactive interface. It functions as an MCP server that exposes AWS Cost Explorer API functionality to Claude Desktop, allowing you to ask questions about your AWS spend in natural language.
 
 ## Features
 
@@ -84,7 +84,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 
 1. Setup [model invocation logs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#setup-cloudwatch-logs-destination) in Amazon CloudWatch.
 1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP server to retrieve data from these services.
-See [here](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/billing-example-policies.html) and [here](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/CloudWatchLogsReadOnlyAccess.html) for sample poliy examples that you can use & modify as per your requirements.
+See [here](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/billing-example-policies.html) and [here](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/CloudWatchLogsReadOnlyAccess.html) for sample policy examples that you can use & modify as per your requirements.
 
 ### Local setup
 
@@ -222,7 +222,7 @@ Once connected to Claude through an MCP-enabled interface, you can ask questions
 - "Show me my top 5 AWS services by cost for the last month"
 - "Analyze my spending by region for the past 14 days"
 - "Which instance types are costing me the most money?"
-- "Which services had the highest month-over-month cost increase?“
+- "Which services had the highest month-over-month cost increase?"
 
 ## Docker Support
 
