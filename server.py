@@ -96,23 +96,32 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
             for event in page.get("events", []):
                 try:
                     # Parse the message as JSON
+
                     message = json.loads(event["message"])
 
                     # Get user prompt from the input messages
                     prompt = ""
-                    if (
-                        message.get("input", {})
-                        .get("inputBodyJson", {})
-                        .get("messages")
-                    ):
+      
+                    input = message.get("input", {})
+                    input_json = input.get("inputBodyJson", {})
+                    messages = input_json.get("messages", None)
+
+                    if messages:
                         for msg in message["input"]["inputBodyJson"]["messages"]:
+                            #print(f"debug 2.2, {type(msg)}")
                             if msg.get("role") == "user" and msg.get("content"):
                                 for content in msg["content"]:
-                                    if content.get("text"):
-                                        prompt += content["text"] + " "
+
+                                    if isinstance(content, dict):
+                                        if content.get("text"):
+                                            prompt += content["text"] + " "
+                                    else:
+                                        prompt += content
+
                         prompt = prompt.strip()
 
                     # Extract only the required fields
+
                     filtered_event = {
                         "timestamp": message.get("timestamp"),
                         "region": message.get("region"),
@@ -156,6 +165,62 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
 
 # Initialize FastMCP server
 mcp = FastMCP("aws_cloudwatch_logs")
+@mcp.prompt()
+def system_prompt_for_agent(aws_account_id: Optional[str] = None) -> str:
+    """
+    Generates a system prompt for an AWS cost analysis agent.
+    
+    This function creates a specialized prompt for an AI agent that analyzes
+    AWS cloud spending. The prompt instructs the agent on how to retrieve,
+    analyze, and present cost optimization insights for AWS accounts.
+    
+    Args:
+        aws_account_id (Optional[str]): The AWS account ID to analyze.
+            If provided, the agent will focus on this specific account.
+            If None, the agent will function without account-specific context.
+    
+    Returns:
+        str: A formatted system prompt for the AWS cost analysis agent.
+    """
+    if aws_account_id:
+        account_context = f"for account {aws_account_id}"
+        initial_line = f"You are an expert AWS cost analyst AI agent {account_context}."
+        second_line = f"Your purpose is to help users understand and optimize their AWS cloud spending for this account."
+    else:
+        account_context = ""
+        initial_line = "You are an expert AWS cost analyst AI agent."
+        second_line = "Your purpose is to help users understand and optimize their AWS cloud spending."
+    
+    system_prompt = f"""
+{initial_line} {second_line} You have access to the following tools:
+
+1. AWS Cost Explorer data retrieval
+2. CloudWatch logs analysis
+3. Resource tagging information
+4. Billing data by account, service, and region
+5. Historical spend pattern analysis
+
+When a user asks about their AWS costs:
+
+1. First, retrieve relevant data using your tools
+2. Analyze spending patterns across services, users, applications, and time periods
+3. Identify:
+   - Highest cost services and resources
+   - Unused or underutilized resources
+   - Spending anomalies and unexpected increases
+   - Resources lacking proper cost allocation tags
+   - Opportunities for reserved instances or savings plans
+   - Potential architectural optimizations
+
+4. Present findings in a clear, actionable format with:
+   - Visual breakdowns of cost distribution
+   - Specific recommendations for cost optimization
+   - Estimated potential savings for each recommendation
+   - Comparative analysis with previous time periods
+
+Respond to queries about specific services, accounts, or time periods with precise, data-backed insights. Always provide practical recommendations that balance cost optimization with operational requirements.
+"""
+    return system_prompt
 
 @mcp.tool()
 def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
@@ -168,6 +233,7 @@ def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
     Returns:
         str: Formatted string representation of daily usage statistics
     """
+    print(f"params={params}")
     df = get_bedrock_logs(params)
 
     if df is None or df.empty:

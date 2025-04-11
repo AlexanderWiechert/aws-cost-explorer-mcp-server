@@ -39,19 +39,19 @@ def parse_arguments() -> argparse.Namespace:
                         help='Hostname of the MCP server')
     parser.add_argument('--port', type=int, default=8000,
                         help='Port of the MCP server')
-    parser.add_argument('--server-name', type=str, default='weather',
+    parser.add_argument('--server-name', type=str, default='aws_cost_explorer',
                          help='Server name identifier in the configuration')
+    parser.add_argument('--aws-account-id', type=str, default="123456789012",
+                         help='AWS account id to use for retrieving cost information, if not specified then the account in which the MCP server is running is used.')
     
     # Model arguments
-    parser.add_argument('--model', type=str, default='anthropic.claude-3-haiku-20240307-v1:0',
+    parser.add_argument('--model', type=str, default='us.anthropic.claude-3-5-haiku-20241022-v1:0',
                         help='Model ID to use with Bedrock')
     
     # Message arguments
     parser.add_argument('--message', type=str, default='my bedrock usage in last 7 days?',
                         help='Message to send to the agent')
-    parser.add_argument('--system-message', type=str,
-                        default='You are a helpful AI assistant. Answer the user\'s questions accurately and concisely.',
-                        help='System message to set context for the agent')
+
                         
     return parser.parse_args()
 
@@ -75,7 +75,7 @@ async def main():
     print(f"Message: {args.message}")
     
     # Initialize the model
-    model = ChatBedrock(model_id=args.model)
+    model = ChatBedrock(model_id=args.model, region_name='us-east-1')
     
     try:
         # Initialize MCP client with the server configuration
@@ -88,6 +88,11 @@ async def main():
             }
         ) as client:
             print("Connected to MCP server successfully")
+
+            # Get available prompt
+            prompt = await client.get_prompt(args.server_name, "system_prompt_for_agent", dict(aws_account_id=args.aws_account_id))
+            print(f"Available prompt: {prompt}")
+            system_prompt = prompt[0].content
             
             # Get available tools and display them
             tools = client.get_tools()
@@ -101,7 +106,7 @@ async def main():
             
             # Format the message with system message first
             formatted_messages = [
-                {"role": "system", "content": args.system_message},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": args.message}
             ]
             

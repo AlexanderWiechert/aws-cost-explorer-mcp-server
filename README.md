@@ -187,7 +187,10 @@ python server.py
 You can test your remote MCP server with the `mcp_sse_client.py` script. Running this script will print the list of tools available from the MCP server and an output for the `get_bedrock_daily_usage_stats` tool.
 
 ```{.bashrc}
+# set the hostname for your MCP server
 MCP_SERVER_HOSTNAME=YOUR_MCP_SERVER_EC2_HOSTNAME
+# or localhost if your MCP server is running locally
+# MCP_SERVER_HOSTNAME=localhost 
 python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME
 ```
 

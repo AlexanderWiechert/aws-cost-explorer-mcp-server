@@ -30,13 +30,15 @@ MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "ec2-44-192-72-20.compute-1.amazona
 MCP_SERVER_PORT = os.getenv("MCP_SERVER_PORT", "8000")
 SECURE = 's' if MCP_SERVER_PORT == "443" else ''
 FULL_MCP_URL = f"http{SECURE}://{MCP_SERVER_URL}:{MCP_SERVER_PORT}/sse"
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID", "123456789012")
 
 # Print configuration at module load time
 print(f"MCP Server configured at: {FULL_MCP_URL}")
 print("To change this configuration, set the MCP_SERVER_URL and MCP_SERVER_PORT environment variables")
 
 # Initialize the model
-model = ChatBedrock(model="us.anthropic.claude-3-5-haiku-20241022-v1:0")
+model = ChatBedrock(model="us.anthropic.claude-3-5-haiku-20241022-v1:0", region_name=AWS_REGION)
 
 @cl.on_chat_start
 async def start():
@@ -70,22 +72,25 @@ async def main(message: cl.Message):
     try:
         async with MultiServerMCPClient(
             {
-                "weather": {
+                "aws_cost_explorer_mcp_server": {
                     "url": FULL_MCP_URL,
                     "transport": "sse",
                 }
             }
         ) as client:
+            prompt = await client.get_prompt("aws_cost_explorer_mcp_server", "system_prompt_for_agent", dict(aws_account_id=AWS_ACCOUNT_ID))
+            print(f"Available prompt: {prompt}")
+            system_prompt = prompt[0].content
+            
             # Create the agent
             agent = create_react_agent(
                 model, 
-                client.get_tools(), 
-                #prompt="You are an AI assistant, use your knowledge and tools provided to you to answer user questions"
+                client.get_tools()
             )
             
             # Format messages for the agent - ensure system message is first
             formatted_messages = [
-                {"role": "system", "content": "You are a helpful AI assistant specializing in AWS cost analysis. Answer the user's questions accurately and concisely."}
+                {"role": "system", "content": system_prompt}
             ]
             # Add the rest of the conversation history
             formatted_messages.extend(message_history)

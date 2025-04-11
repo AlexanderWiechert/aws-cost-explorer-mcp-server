@@ -36,18 +36,27 @@ async def run(server_url):
 
             # List available prompts
             prompts = await session.list_prompts()
-            print("\nAvailable prompts:")
+            print("=" * 50)
+            print("Available prompts:")
+            print("=" * 50)
             print(prompts)
+            print("=" * 50)
 
             # List available resources
             resources = await session.list_resources()
-            print("\nAvailable resources:")
+            print("=" * 50)
+            print("Available resources:")
+            print("=" * 50)
             print(resources)
+            print("=" * 50)
 
             # List available tools
             tools = await session.list_tools()
-            print("\nAvailable tools:")
+            print("=" * 50)
+            print("Available tools:")
+            print("=" * 50)
             print(tools)
+            print("=" * 50)
 
             # Call the Bedrock usage stats tool with command-line arguments
             days = 7
@@ -59,9 +68,12 @@ async def run(server_url):
             )
             
             # Display the results
-            print("\nBedrock Usage Results:")
+            print("=" * 50)
+            print("Bedrock Usage Results:")
+            print("=" * 50)
             for r in result.content:
                 print(r.text)
+            print("=" * 50)
 
 if __name__ == "__main__":
     # Set up command-line argument parsing
