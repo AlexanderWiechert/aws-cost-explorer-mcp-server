@@ -31,7 +31,7 @@ MCP_SERVER_PORT = os.getenv("MCP_SERVER_PORT", "8000")
 SECURE = 's' if MCP_SERVER_PORT == "443" else ''
 FULL_MCP_URL = f"http{SECURE}://{MCP_SERVER_URL}:{MCP_SERVER_PORT}/sse"
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-AWS_ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID", "123456789012")
+AWS_ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID", "")
 
 # Print configuration at module load time
 print(f"MCP Server configured at: {FULL_MCP_URL}")

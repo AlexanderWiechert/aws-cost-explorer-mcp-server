@@ -26,7 +26,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
         stopReason="endTurn",
     )
 
-async def run(server_url):
+async def run(server_url, args):
     print(f"Connecting to MCP server at: {server_url}")    
     
     async with sse_client(server_url) as (read, write):
@@ -64,7 +64,7 @@ async def run(server_url):
             print(f"\nCalling get_bedrock_daily_usage_stats tool with days={days}, region={region}:")
             result = await session.call_tool(
                 "get_bedrock_daily_usage_stats", 
-                arguments={"params": {"days": days, "region": region}}
+                arguments={"params": {"days": days, "region": region, "aws_account_id": args.aws_account_id}}
             )
             
             # Display the results
@@ -82,6 +82,8 @@ if __name__ == "__main__":
                         help='Hostname of the MCP server')
     parser.add_argument('--port', type=int, default=8000,
                         help='Port of the MCP server')
+    parser.add_argument('--aws-account-id', type=str, default=None,
+                        help='AWS account id to monitor bedrock usage for if different from the current account in which the MCP server is running (requires cross-account access)')
     
     # Parse the arguments
     args = parser.parse_args()
@@ -96,4 +98,4 @@ if __name__ == "__main__":
     
     # Run the async main function
     import asyncio
-    asyncio.run(run(server_url))
+    asyncio.run(run(server_url, args))

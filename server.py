@@ -44,8 +44,95 @@ class BedrockLogsParams(BaseModel):
         description="Bedrock Log Group Name",
         default=os.environ.get('BEDROCK_LOG_GROUP_NAME', 'BedrockModelInvocationLogGroup')
     )
+    aws_account_id: Optional[str] = Field(        
+        description="AWS account id (if different from the current AWS account) of the account for which to get the cost data",
+        default=None
+    )
 
+class EC2Params(BaseModel):
+    """Parameters for retrieving EC2 Cost Explorer information."""
+    days: int = Field(
+        default=1,
+        description="Number of days to look back for Bedrock logs",
+        ge=1,
+        le=90
+    )
+    region: str = Field(
+        default="us-east-1",
+        description="AWS region to retrieve logs from"
+    )
+    aws_account_id: Optional[str] = Field(        
+        description="AWS account id (if different from the current AWS account) of the account for which to get the cost data",
+        default=None
+    )
 
+# global params
+# if we want to get AWS spend info from a different account we need to assume a role in that account
+# and while the account id would be provided by the user of this MCP server, we set the name of the role
+# to assume in this code through an environ variable
+ACCOUNT_B_ROLE_NAME: str = os.environ.get('ACCOUNT_B_ROLE_NAME', "BedrockCrossAccount2")
+
+def get_aws_service_boto3_client(service: str, aws_account_id: Optional[str], region_name: str, account_b_role_name: Optional[str] = ACCOUNT_B_ROLE_NAME):
+    """
+    Creates a boto3 client for the specified service in this current AWS account or in a different account
+    if an account id is specified.
+    
+    Args:
+        service (str): AWS service name (e.g., 'logs', 'cloudwatch')
+        region_name (str): AWS region (e.g. 'us-east-1')
+        aws_account_id (str): AWS account ID to access, this is the account in which the role is to be assumed
+        account_b_role_name (str): IAM role name to assume
+        
+    Returns:
+        boto3.client: Service client with assumed role credentials
+    """
+    try:
+        this_account = boto3.client('sts').get_caller_identity()['Account']
+        if aws_account_id is not None and this_account != aws_account_id:
+            # the request is for a different account, we need to assume a role in that account
+            print(f"Request is for a different account: {aws_account_id}, current account: {this_account}")
+            # Create STS client
+            sts_client = boto3.client('sts')
+            current_identity = sts_client.get_caller_identity()
+            print(f"Current identity: {current_identity}")
+            
+            # Define the role ARN
+            role_arn = f"arn:aws:iam::{aws_account_id}:role/{account_b_role_name}"
+            print(f"Attempting to assume role: {role_arn}")
+            
+            # Assume the role
+            assumed_role = sts_client.assume_role(
+                RoleArn=role_arn,
+                RoleSessionName="CrossAccountSession"
+            )
+            
+            # Extract temporary credentials
+            credentials = assumed_role['Credentials']
+            
+            # Create client with assumed role credentials
+            client = boto3.client(
+                service,
+                region_name=region_name,
+                aws_access_key_id=credentials['AccessKeyId'],
+                aws_secret_access_key=credentials['SecretAccessKey'],
+                aws_session_token=credentials['SessionToken']
+            )
+            
+            print(f"Successfully created cross-account client for {service} in account {aws_account_id}")
+            return client
+        else:
+            client = boto3.client(
+                service,
+                region_name=region_name
+            )
+            
+            print(f"Successfully created client for {service} in the current AWS account {this_account}")
+            return client
+        
+    except Exception as e:
+        print(f"Error creating cross-account client for {service}: {e}")
+        raise e
+    
 def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
     """
     Retrieve Bedrock invocation logs for the last n days in a given region as a dataframe
@@ -66,7 +153,8 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
             - totalTokens: Total tokens used
     """
     # Initialize CloudWatch Logs client
-    client = boto3.client("logs", region_name=params.region)
+    print(f"get_bedrock_logs, params={params}")
+    client = get_aws_service_boto3_client("logs", params.aws_account_id, params.region)
 
     # Calculate time range
     end_time = datetime.now()
@@ -166,7 +254,7 @@ def get_bedrock_logs(params: BedrockLogsParams) -> Optional[pd.DataFrame]:
 # Initialize FastMCP server
 mcp = FastMCP("aws_cloudwatch_logs")
 @mcp.prompt()
-def system_prompt_for_agent(aws_account_id: Optional[str] = None) -> str:
+def system_prompt_for_agent(aws_account_id: str = "") -> str:
     """
     Generates a system prompt for an AWS cost analysis agent.
     
@@ -182,14 +270,11 @@ def system_prompt_for_agent(aws_account_id: Optional[str] = None) -> str:
     Returns:
         str: A formatted system prompt for the AWS cost analysis agent.
     """
-    if aws_account_id:
-        account_context = f"for account {aws_account_id}"
-        initial_line = f"You are an expert AWS cost analyst AI agent {account_context}."
-        second_line = f"Your purpose is to help users understand and optimize their AWS cloud spending for this account."
-    else:
-        account_context = ""
-        initial_line = "You are an expert AWS cost analyst AI agent."
-        second_line = "Your purpose is to help users understand and optimize their AWS cloud spending."
+    if aws_account_id == "":
+        aws_account_id = boto3.client('sts').get_caller_identity()['Account']
+    account_context = f"for account {aws_account_id}"
+    initial_line = f"You are an expert AWS cost analyst AI agent {account_context}."
+    second_line = f"Your purpose is to help users understand and optimize their AWS cloud spending for this account."
     
     system_prompt = f"""
 {initial_line} {second_line} You have access to the following tools:
@@ -556,7 +641,7 @@ def get_bedrock_hourly_usage_stats(params: BedrockLogsParams) -> str:
     return result
 
 @mcp.tool()
-async def get_ec2_spend_last_day() -> Dict[str, Any]:
+async def get_ec2_spend_last_day(params: EC2Params) -> Dict[str, Any]:
     """
     Retrieve EC2 spend for the last day using standard AWS Cost Explorer API.
     
@@ -564,7 +649,8 @@ async def get_ec2_spend_last_day() -> Dict[str, Any]:
         Dict[str, Any]: The raw response from the AWS Cost Explorer API, or None if an error occurs.
     """
     # Initialize the Cost Explorer client
-    ce_client = boto3.client('ce')
+    ce_client = get_aws_service_boto3_client("ce", params.aws_account_id, params.region)
+
     
     # Calculate the time period - last day
     end_date = datetime.now().strftime('%Y-%m-%d')
@@ -645,7 +731,7 @@ async def get_ec2_spend_last_day() -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_detailed_breakdown_by_day(params: DaysParam) -> str: #Dict[str, Any]:
+async def get_detailed_breakdown_by_day(params: EC2Params) -> str: #Dict[str, Any]:
     """
     Retrieve daily spend breakdown by region, service, and instance type.
     
@@ -659,7 +745,7 @@ async def get_detailed_breakdown_by_day(params: DaysParam) -> str: #Dict[str, An
         or (None, error_message) if an error occurs.
     """
     # Initialize the Cost Explorer client
-    ce_client = boto3.client('ce')
+    ce_client = get_aws_service_boto3_client("ce", params.aws_account_id, params.region)
     
     # Get the days parameter
     days = params.days

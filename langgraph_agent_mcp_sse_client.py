@@ -41,7 +41,7 @@ def parse_arguments() -> argparse.Namespace:
                         help='Port of the MCP server')
     parser.add_argument('--server-name', type=str, default='aws_cost_explorer',
                          help='Server name identifier in the configuration')
-    parser.add_argument('--aws-account-id', type=str, default="123456789012",
+    parser.add_argument('--aws-account-id', type=str, default="",
                          help='AWS account id to use for retrieving cost information, if not specified then the account in which the MCP server is running is used.')
     
     # Model arguments
@@ -49,10 +49,9 @@ def parse_arguments() -> argparse.Namespace:
                         help='Model ID to use with Bedrock')
     
     # Message arguments
-    parser.add_argument('--message', type=str, default='my bedrock usage in last 7 days?',
+    parser.add_argument('--message', type=str, default='my bedrock usage in last 7 days? My account id is {}',
                         help='Message to send to the agent')
 
-                        
     return parser.parse_args()
 
 async def main():
@@ -66,7 +65,7 @@ async def main():
     """
     # Parse command line arguments
     args = parse_arguments()
-    
+    args.message = args.message.format(args.aws_account_id)
     # Display configuration
     secure = 's' if args.port == 443 else ''
     server_url = f"http{secure}://{args.host}:{args.port}/sse"
