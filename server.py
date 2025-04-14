@@ -70,9 +70,9 @@ class EC2Params(BaseModel):
 # if we want to get AWS spend info from a different account we need to assume a role in that account
 # and while the account id would be provided by the user of this MCP server, we set the name of the role
 # to assume in this code through an environ variable
-ACCOUNT_B_ROLE_NAME: str = os.environ.get('ACCOUNT_B_ROLE_NAME', "BedrockCrossAccount2")
+CROSS_ACCOUNT_ROLE_NAME: str = os.environ.get('CROSS_ACCOUNT_ROLE_NAME', "BedrockCrossAccount2")
 
-def get_aws_service_boto3_client(service: str, aws_account_id: Optional[str], region_name: str, account_b_role_name: Optional[str] = ACCOUNT_B_ROLE_NAME):
+def get_aws_service_boto3_client(service: str, aws_account_id: Optional[str], region_name: str, account_b_role_name: Optional[str] = CROSS_ACCOUNT_ROLE_NAME):
     """
     Creates a boto3 client for the specified service in this current AWS account or in a different account
     if an account id is specified.
@@ -318,7 +318,7 @@ def get_bedrock_daily_usage_stats(params: BedrockLogsParams) -> str:
     Returns:
         str: Formatted string representation of daily usage statistics
     """
-    print(f"params={params}")
+    print(f"get_bedrock_daily_usage_stats, params={params}")
     df = get_bedrock_logs(params)
 
     if df is None or df.empty:
@@ -459,6 +459,7 @@ def get_bedrock_hourly_usage_stats(params: BedrockLogsParams) -> str:
     Returns:
         str: Formatted string representation of hourly usage statistics
     """
+    print(f"get_bedrock_hourly_usage_stats, params={params}")
     df = get_bedrock_logs(params)
 
     if df is None or df.empty:
@@ -648,6 +649,7 @@ async def get_ec2_spend_last_day(params: EC2Params) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: The raw response from the AWS Cost Explorer API, or None if an error occurs.
     """
+    print(f"get_ec2_spend_last_day, params={params}")
     # Initialize the Cost Explorer client
     ce_client = get_aws_service_boto3_client("ce", params.aws_account_id, params.region)
 
@@ -744,6 +746,7 @@ async def get_detailed_breakdown_by_day(params: EC2Params) -> str: #Dict[str, An
             - A string containing the formatted output report
         or (None, error_message) if an error occurs.
     """
+    print(f"get_detailed_breakdown_by_day, params={params}")
     # Initialize the Cost Explorer client
     ce_client = get_aws_service_boto3_client("ce", params.aws_account_id, params.region)
     

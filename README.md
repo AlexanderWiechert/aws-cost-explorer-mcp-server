@@ -21,6 +21,8 @@ flowchart LR
 
 You can run the MCP server locally and access it via the Claude Desktop or you could also run a Remote MCP server on Amazon EC2 and access it via a MCP client built into a LangGraph Agent.
 
+🚨You can also use this MCP server to get AWS spend information from other accounts as long as the IAM role used by the MCP server can assume roles in those other accounts🚨
+
 ### Demo video
 
 [![AWS Cost Explorer MCP Server Deep Dive](https://img.youtube.com/vi/WuVOmYLRFmI/maxresdefault.jpg)](https://youtu.be/WuVOmYLRFmI)
@@ -85,6 +87,7 @@ This tool provides a convenient way to analyze and visualize AWS cloud spending 
 1. Setup [model invocation logs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#setup-cloudwatch-logs-destination) in Amazon CloudWatch.
 1. Ensure that the IAM user/role being used has full read-only access to Amazon Cost Explorer and Amazon CloudWatch, this is required for the MCP server to retrieve data from these services.
 See [here](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/billing-example-policies.html) and [here](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/CloudWatchLogsReadOnlyAccess.html) for sample policy examples that you can use & modify as per your requirements.
+1. To allow your MCP server to access AWS spend information from other accounts set the the `CROSS_ACCOUNT_ROLE_NAME` parameter while starting the server and now you can provide the account AWS account id for another account while interacting with your agent and then agent will pass the account id to the server.
 
 ### Local setup
 
@@ -97,6 +100,7 @@ Run the server using:
 ```
 export MCP_TRANSPORT=stdio
 export BEDROCK_LOG_GROUP_NAME=YOUR_BEDROCK_CW_LOG_GROUP_NAME
+export CROSS_ACCOUNT_ROLE_NAME=ROLE_NAME_FOR_THE_ROLE_TO_ASSUME_IN_OTHER_ACCOUNTS # can be ignored if you do not want AWS spend info from other accounts
 python server.py
 ```
 
@@ -117,12 +121,13 @@ Add the following to your Claude Desktop configuration file. The file can be fou
   "mcpServers": {
     "aws-cost-explorer": {
       "command": "docker",
-      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "-e", "BEDROCK_LOG_GROUP_NAME", "-e", "MCP_TRANSPORT", "aws-cost-explorer-mcp:latest" ],
+      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "-e", "BEDROCK_LOG_GROUP_NAME", "-e", "MCP_TRANSPORT", "-e", "CROSS_ACCOUNT_ROLE_NAME", "aws-cost-explorer-mcp:latest" ],
       "env": {
         "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
         "AWS_REGION": "us-east-1",
         "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME",
+        "CROSS_ACCOUNT_ROLE_NAME": "ROLE_NAME_FOR_THE_ROLE_TO_ASSUME_IN_OTHER_ACCOUNTS",
         "MCP_TRANSPORT": "stdio"
       }
     }
@@ -152,6 +157,7 @@ If you prefer to run the server directly without Docker, you can use UV:
         "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
         "AWS_REGION": "us-east-1",
         "BEDROCK_LOG_GROUP_NAME": "YOUR_CLOUDWATCH_BEDROCK_MODEL_INVOCATION_LOG_GROUP_NAME",
+        "CROSS_ACCOUNT_ROLE_NAME": "ROLE_NAME_FOR_THE_ROLE_TO_ASSUME_IN_OTHER_ACCOUNTS",
         "MCP_TRANSPORT": "stdio"
       }
     }
@@ -174,6 +180,7 @@ Run the server using:
 ```
 export MCP_TRANSPORT=sse
 export BEDROCK_LOG_GROUP_NAME=YOUR_BEDROCK_CW_LOG_GROUP_NAME
+export CROSS_ACCOUNT_ROLE_NAME=ROLE_NAME_FOR_THE_ROLE_TO_ASSUME_IN_OTHER_ACCOUNTS # can be ignored if you do not want AWS spend info from other accounts
 python server.py
 ```
 
@@ -191,7 +198,8 @@ You can test your remote MCP server with the `mcp_sse_client.py` script. Running
 MCP_SERVER_HOSTNAME=YOUR_MCP_SERVER_EC2_HOSTNAME
 # or localhost if your MCP server is running locally
 # MCP_SERVER_HOSTNAME=localhost 
-python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME
+AWS_ACCOUNT_ID=AWS_ACCOUNT_ID_TO_GET_INFO_ABOUT # if set to empty or if the --aws-account-id switch is not specified then it gets the info about the AWS account MCP server is running in
+python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME --aws-account-id $AWS_ACCOUNT_ID
 ```
 
 
@@ -324,7 +332,8 @@ We can use [`nginx`](https://nginx.org/) as a reverse-proxy so that it can provi
 
     ```{.bashrc}
     MCP_SERVER_HOSTNAME=YOUR_MCP_SERVER_DOMAIN_NAME
-    python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME --port 443
+    AWS_ACCOUNT_ID=AWS_ACCOUNT_ID_TO_GET_INFO_ABOUT # if set to empty or if the --aws-account-id switch is not specified then it gets the info about the AWS account MCP server is running in
+    python mcp_sse_client.py --host $MCP_SERVER_HOSTNAME --port 443 --aws-account-id $AWS_ACCOUNT_ID
     ```
 
     Similarly you could run the chainlit app to talk to remote MCP server over HTTPS.
@@ -337,8 +346,8 @@ We can use [`nginx`](https://nginx.org/) as a reverse-proxy so that it can provi
 
     Similarly you could run the LangGraph Agent to talk to remote MCP server over HTTPS.
 
-    ```{.bashrc}
-    python langgraph_agent_mcp_sse_client.py --host YOUR_MCP_SERVER_DOMAIN_NAME --port 443 
+    ```{.bashrc}    
+    python langgraph_agent_mcp_sse_client.py --host $MCP_SERVER_HOSTNAME --port 443 --aws-account-id $AWS_ACCOUNT_ID
     ```
 
 ## License
